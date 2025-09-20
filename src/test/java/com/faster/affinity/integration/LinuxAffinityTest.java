@@ -6,21 +6,24 @@ import com.faster.affinity.exceptions.OperationResult;
 import com.faster.affinity.core.AffinityManager;
 import com.faster.affinity.topology.TopologyDetector;
 import com.faster.affinity.performance.PerformanceMonitor;
+import org.junit.jupiter.api.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.*;
 import java.util.concurrent.*;
 
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class LinuxAffinityTest {
     private static final int WARMUP_ITERATIONS = 1000;
     private static final int TEST_ITERATIONS = 1000;
     private static final int LATENCY_PERCENTILES = 5; // 50th, 90th, 95th, 99th, 99.9th
 
-    private final AffinityLibrary affinityLib;
+    private AffinityLibrary affinityLib;
     private final List<TestResult> results = new ArrayList<>();
-    private final boolean verboseMode;
+    private final boolean verboseMode = false; // Set to true for verbose output
 
-    public LinuxAffinityTest(boolean verbose) {
-        this.verboseMode = verbose;
+    @BeforeAll
+    void setUp() {
         this.affinityLib = AffinityLibraryFactory.getDefault();
 
         if (!affinityLib.isInitialized()) {
@@ -28,62 +31,179 @@ public class LinuxAffinityTest {
         }
     }
 
-    public static void main(String[] args) {
-        boolean verbose = args.length > 0 && args[0].equals("-v");
+    @AfterAll
+    void tearDown() {
+        if (affinityLib != null) {
+            affinityLib.shutdown();
+        }
+    }
 
+    @Test
+    @DisplayName("Complete Linux HFT Affinity Test Suite")
+    void runAllTests() {
         System.out.println("=== Linux HFT Affinity Library Test Suite ===");
         System.out.println("Platform: " + System.getProperty("os.name") + " " + System.getProperty("os.version"));
         System.out.println("JVM: " + System.getProperty("java.version"));
         System.out.println("Processors: " + Runtime.getRuntime().availableProcessors());
         System.out.println();
 
-        try {
-            LinuxAffinityTest test = new LinuxAffinityTest(verbose);
-            test.runAllTests();
-            test.printResults();
-        } catch (Exception e) {
-            System.err.println("Test suite failed: " + e.getMessage());
-            e.printStackTrace();
-            System.exit(1);
-        }
-    }
-
-    public void runAllTests() {
-        // 1. System capability detection
+        // Run all individual tests
         testSystemCapabilities();
-
-        // 2. CPU affinity tests
         testCpuAffinityOperations();
         testIsolatedCorePerformance();
-
-        // 3. NUMA tests
         testNumaTopologyDetection();
         testNumaMemoryAllocation();
         testNumaAwareThreadPlacement();
-
-        // 4. Cache topology tests
         testCacheTopologyDetection();
         testCacheSharingOptimization();
-
-        // 5. Performance monitoring
         testPerformanceMonitoring();
-
-        // 6. Latency tests
         testAffinitySetLatency();
         testContextSwitchReduction();
-
-        // 7. HFT-specific scenarios
         testMarketDataHandlerOptimization();
         testOrderProcessingPipeline();
         testCriticalPathOptimization();
-
-        // 8. Stress tests
         testConcurrentAffinityChanges();
         testRapidThreadMigration();
+
+        printResults();
+
+        // Verify that most tests passed
+        long passed = results.stream().filter(TestResult::isSuccess).count();
+        long failed = results.size() - passed;
+
+        assertTrue(passed > failed, "More tests should pass than fail. Passed: " + passed + ", Failed: " + failed);
+    }
+
+    @Test
+    @DisplayName("System Capabilities Detection")
+    void testSystemCapabilities() {
+        testSystemCapabilitiesImpl();
+        TestResult result = results.get(results.size() - 1);
+        assertTrue(result.isSuccess(), "System capabilities test should pass: " + result.getError());
+    }
+
+    @Test
+    @DisplayName("CPU Affinity Operations")
+    void testCpuAffinityOperations() {
+        testCpuAffinityOperationsImpl();
+        TestResult result = results.get(results.size() - 1);
+        assertTrue(result.isSuccess(), "CPU affinity operations test should pass: " + result.getError());
+    }
+
+    @Test
+    @DisplayName("Isolated Core Performance")
+    void testIsolatedCorePerformance() {
+        testIsolatedCorePerformanceImpl();
+        TestResult result = results.get(results.size() - 1);
+        assertTrue(result.isSuccess(), "Isolated core performance test should pass: " + result.getError());
+    }
+
+    @Test
+    @DisplayName("NUMA Topology Detection")
+    void testNumaTopologyDetection() {
+        testNumaTopologyDetectionImpl();
+        TestResult result = results.get(results.size() - 1);
+        assertTrue(result.isSuccess(), "NUMA topology detection test should pass: " + result.getError());
+    }
+
+    @Test
+    @DisplayName("NUMA Memory Allocation")
+    void testNumaMemoryAllocation() {
+        testNumaMemoryAllocationImpl();
+        TestResult result = results.get(results.size() - 1);
+        assertTrue(result.isSuccess(), "NUMA memory allocation test should pass: " + result.getError());
+    }
+
+    @Test
+    @DisplayName("NUMA Aware Thread Placement")
+    void testNumaAwareThreadPlacement() {
+        testNumaAwareThreadPlacementImpl();
+        TestResult result = results.get(results.size() - 1);
+        assertTrue(result.isSuccess(), "NUMA aware thread placement test should pass: " + result.getError());
+    }
+
+    @Test
+    @DisplayName("Cache Topology Detection")
+    void testCacheTopologyDetection() {
+        testCacheTopologyDetectionImpl();
+        TestResult result = results.get(results.size() - 1);
+        assertTrue(result.isSuccess(), "Cache topology detection test should pass: " + result.getError());
+    }
+
+    @Test
+    @DisplayName("Cache Sharing Optimization")
+    void testCacheSharingOptimization() {
+        testCacheSharingOptimizationImpl();
+        TestResult result = results.get(results.size() - 1);
+        assertTrue(result.isSuccess(), "Cache sharing optimization test should pass: " + result.getError());
+    }
+
+    @Test
+    @DisplayName("Performance Monitoring")
+    void testPerformanceMonitoring() {
+        testPerformanceMonitoringImpl();
+        TestResult result = results.get(results.size() - 1);
+        assertTrue(result.isSuccess(), "Performance monitoring test should pass: " + result.getError());
+    }
+
+    @Test
+    @DisplayName("Affinity Set Latency")
+    void testAffinitySetLatency() {
+        testAffinitySetLatencyImpl();
+        TestResult result = results.get(results.size() - 1);
+        assertTrue(result.isSuccess(), "Affinity set latency test should pass: " + result.getError());
+    }
+
+    @Test
+    @DisplayName("Context Switch Reduction")
+    void testContextSwitchReduction() {
+        testContextSwitchReductionImpl();
+        TestResult result = results.get(results.size() - 1);
+        assertTrue(result.isSuccess(), "Context switch reduction test should pass: " + result.getError());
+    }
+
+    @Test
+    @DisplayName("Market Data Handler Optimization")
+    void testMarketDataHandlerOptimization() {
+        testMarketDataHandlerOptimizationImpl();
+        TestResult result = results.get(results.size() - 1);
+        assertTrue(result.isSuccess(), "Market data handler optimization test should pass: " + result.getError());
+    }
+
+    @Test
+    @DisplayName("Order Processing Pipeline")
+    void testOrderProcessingPipeline() {
+        testOrderProcessingPipelineImpl();
+        TestResult result = results.get(results.size() - 1);
+        assertTrue(result.isSuccess(), "Order processing pipeline test should pass: " + result.getError());
+    }
+
+    @Test
+    @DisplayName("Critical Path Optimization")
+    void testCriticalPathOptimization() {
+        testCriticalPathOptimizationImpl();
+        TestResult result = results.get(results.size() - 1);
+        assertTrue(result.isSuccess(), "Critical path optimization test should pass: " + result.getError());
+    }
+
+    @Test
+    @DisplayName("Concurrent Affinity Changes")
+    void testConcurrentAffinityChanges() {
+        testConcurrentAffinityChangesImpl();
+        TestResult result = results.get(results.size() - 1);
+        assertTrue(result.isSuccess(), "Concurrent affinity changes test should pass: " + result.getError());
+    }
+
+    @Test
+    @DisplayName("Rapid Thread Migration")
+    void testRapidThreadMigration() {
+        testRapidThreadMigrationImpl();
+        TestResult result = results.get(results.size() - 1);
+        assertTrue(result.isSuccess(), "Rapid thread migration test should pass: " + result.getError());
     }
 
     // Test 1: System Capabilities
-    private void testSystemCapabilities() {
+    private void testSystemCapabilitiesImpl() {
         TestResult result = new TestResult("System Capabilities Detection");
 
         try {
@@ -116,7 +236,7 @@ public class LinuxAffinityTest {
     }
 
     // Test 2: CPU Affinity Operations
-    private void testCpuAffinityOperations() {
+    private void testCpuAffinityOperationsImpl() {
         TestResult result = new TestResult("CPU Affinity Operations");
 
         try {
@@ -157,7 +277,7 @@ public class LinuxAffinityTest {
     }
 
     // Test 3: Isolated Core Performance
-    private void testIsolatedCorePerformance() {
+    private void testIsolatedCorePerformanceImpl() {
         TestResult result = new TestResult("Isolated Core Performance");
 
         try {
@@ -194,7 +314,7 @@ public class LinuxAffinityTest {
     }
 
     // Test 4: NUMA Topology Detection
-    private void testNumaTopologyDetection() {
+    private void testNumaTopologyDetectionImpl() {
         TestResult result = new TestResult("NUMA Topology Detection");
 
         try {
@@ -227,7 +347,7 @@ public class LinuxAffinityTest {
     }
 
     // Test 5: NUMA Memory Allocation
-    private void testNumaMemoryAllocation() {
+    private void testNumaMemoryAllocationImpl() {
         TestResult result = new TestResult("NUMA Memory Allocation");
 
         try {
@@ -257,7 +377,7 @@ public class LinuxAffinityTest {
     }
 
     // Test 6: NUMA Aware Thread Placement
-    private void testNumaAwareThreadPlacement() {
+    private void testNumaAwareThreadPlacementImpl() {
         TestResult result = new TestResult("NUMA Aware Thread Placement");
 
         try {
@@ -287,7 +407,7 @@ public class LinuxAffinityTest {
     }
 
     // Test 7: Cache Topology Detection
-    private void testCacheTopologyDetection() {
+    private void testCacheTopologyDetectionImpl() {
         TestResult result = new TestResult("Cache Topology Detection");
 
         try {
@@ -313,7 +433,7 @@ public class LinuxAffinityTest {
     }
 
     // Test 8: Cache Sharing Optimization
-    private void testCacheSharingOptimization() {
+    private void testCacheSharingOptimizationImpl() {
         TestResult result = new TestResult("Cache Sharing Optimization");
 
         try {
@@ -334,7 +454,7 @@ public class LinuxAffinityTest {
     }
 
     // Test 9: Performance Monitoring
-    private void testPerformanceMonitoring() {
+    private void testPerformanceMonitoringImpl() {
         TestResult result = new TestResult("Performance Monitoring");
 
         try {
@@ -368,7 +488,7 @@ public class LinuxAffinityTest {
     }
 
     // Test 10: Affinity Set Latency
-    private void testAffinitySetLatency() {
+    private void testAffinitySetLatencyImpl() {
         TestResult result = new TestResult("Affinity Set Latency");
 
         try {
@@ -398,7 +518,7 @@ public class LinuxAffinityTest {
     }
 
     // Test 11: Context Switch Reduction
-    private void testContextSwitchReduction() {
+    private void testContextSwitchReductionImpl() {
         TestResult result = new TestResult("Context Switch Reduction");
 
         try {
@@ -425,7 +545,7 @@ public class LinuxAffinityTest {
     }
 
     // Test 12: Market Data Handler Optimization
-    private void testMarketDataHandlerOptimization() {
+    private void testMarketDataHandlerOptimizationImpl() {
         TestResult result = new TestResult("Market Data Handler Optimization");
 
         try {
@@ -447,7 +567,7 @@ public class LinuxAffinityTest {
     }
 
     // Test 13: Order Processing Pipeline
-    private void testOrderProcessingPipeline() {
+    private void testOrderProcessingPipelineImpl() {
         TestResult result = new TestResult("Order Processing Pipeline");
 
         try {
@@ -471,7 +591,7 @@ public class LinuxAffinityTest {
     }
 
     // Test 14: Critical Path Optimization
-    private void testCriticalPathOptimization() {
+    private void testCriticalPathOptimizationImpl() {
         TestResult result = new TestResult("Critical Path Optimization");
 
         try {
@@ -489,7 +609,7 @@ public class LinuxAffinityTest {
     }
 
     // Test 15: Concurrent Affinity Changes
-    private void testConcurrentAffinityChanges() {
+    private void testConcurrentAffinityChangesImpl() {
         TestResult result = new TestResult("Concurrent Affinity Changes");
 
         try {
@@ -523,7 +643,7 @@ public class LinuxAffinityTest {
     }
 
     // Test 16: Rapid Thread Migration
-    private void testRapidThreadMigration() {
+    private void testRapidThreadMigrationImpl() {
         TestResult result = new TestResult("Rapid Thread Migration");
 
         try {
