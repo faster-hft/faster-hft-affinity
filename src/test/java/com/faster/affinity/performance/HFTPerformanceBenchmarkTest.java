@@ -231,7 +231,7 @@ public class HFTPerformanceBenchmarkTest {
         startTime = System.nanoTime();
 
         for (int i = 0; i < BENCHMARK_ITERATIONS / 10; i++) {
-            for (long threadId : threadIds) {
+            for (long ignored : threadIds) {
                 affinityManager.setCurrentThreadAffinityFast(testCpuMask);
             }
         }

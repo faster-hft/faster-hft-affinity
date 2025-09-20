@@ -43,7 +43,7 @@ public final class HotPathCache {
      */
     public static final class AffinityCache {
         // Cache validation
-        private long cacheVersion = 0;
+        private long cacheVersion;
 
         // Cached affinity state
         private final BitSet lastThreadAffinity;
@@ -78,17 +78,9 @@ public final class HotPathCache {
          * Check if cached thread affinity is valid.
          */
         public boolean isThreadAffinityValid(long threadId) {
-            if (!isCacheValid()) {
-                return false;
-            }
-            if (threadId != lastThreadId) {
-                return false;
-            }
-            // Check for cache staleness (1 millisecond expiration for HFT)
-            if (lastValidationTime > 0 && (System.nanoTime() - lastValidationTime) > 1_000_000) {
-                return false;
-            }
-            return true;
+            return isCacheValid() &&
+                   threadId == lastThreadId &&
+                   (lastValidationTime == 0 || (System.nanoTime() - lastValidationTime) <= 1_000_000);
         }
 
         /**
@@ -117,13 +109,7 @@ public final class HotPathCache {
          * Check if cached process affinity is valid.
          */
         public boolean isProcessAffinityValid(int processId) {
-            if (!isCacheValid()) {
-                return false;
-            }
-            if (processId != lastProcessId) {
-                return false;
-            }
-            return true;
+            return isCacheValid() && processId == lastProcessId;
         }
 
         /**

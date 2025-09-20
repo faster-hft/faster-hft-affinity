@@ -17,7 +17,7 @@ import java.util.BitSet;
  * Uses thread-local caching and pre-allocated objects to minimize latency.
  */
 public final class LockFreeAffinityOperations {
-    private static final Logger logger = LoggerFactory.getLogger(LockFreeAffinityOperations.class);
+    // Logger removed - not used in performance-critical code
 
     private final PlatformProvider platformProvider;
     private final HotPathCache hotPathCache;

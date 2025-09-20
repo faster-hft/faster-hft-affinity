@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.LongAdder;
  * Tracks latency, throughput, and efficiency metrics for hot path operations.
  */
 public final class HFTPerformanceProfiler {
-    private static final Logger logger = LoggerFactory.getLogger(HFTPerformanceProfiler.class);
+    // Logger removed - not used in performance-critical code
 
     // Operation counters
     private final LongAdder hotPathOperations = new LongAdder();
@@ -35,11 +35,10 @@ public final class HFTPerformanceProfiler {
     private final LongAdder numaLocalAllocations = new LongAdder();
     private final LongAdder numaCrossNodeAllocations = new LongAdder();
 
-    private final HotPathCache hotPathCache;
     private volatile boolean enabled = true;
 
     public HFTPerformanceProfiler(HotPathCache hotPathCache) {
-        this.hotPathCache = hotPathCache;
+        // hotPathCache reference not needed for current implementation
     }
 
     /**
