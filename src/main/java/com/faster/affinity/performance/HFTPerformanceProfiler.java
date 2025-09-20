@@ -2,8 +2,6 @@ package com.faster.affinity.performance;
 
 import com.faster.affinity.cache.HotPathCache;
 import com.faster.affinity.pool.ObjectPoolManager;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
@@ -37,8 +35,8 @@ public final class HFTPerformanceProfiler {
 
     private volatile boolean enabled = true;
 
-    public HFTPerformanceProfiler(HotPathCache hotPathCache) {
-        // hotPathCache reference not needed for current implementation
+    public HFTPerformanceProfiler() {
+        // Simplified constructor - no dependencies needed
     }
 
     /**

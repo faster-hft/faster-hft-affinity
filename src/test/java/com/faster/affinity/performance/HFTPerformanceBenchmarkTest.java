@@ -151,6 +151,7 @@ public class HFTPerformanceBenchmarkTest {
 
         affinityManager.resetHFTPerformanceStats();
 
+        @SuppressWarnings("resource") // ExecutorService doesn't implement AutoCloseable in Java 11
         ExecutorService executor = Executors.newFixedThreadPool(THREAD_COUNT);
         CountDownLatch latch = new CountDownLatch(THREAD_COUNT);
 

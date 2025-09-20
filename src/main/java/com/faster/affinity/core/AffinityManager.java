@@ -182,7 +182,7 @@ public final class AffinityManager {
             }
 
             // Initialize HFT performance profiler
-            hftProfiler = new HFTPerformanceProfiler(hotPathCache);
+            hftProfiler = new HFTPerformanceProfiler();
 
             // Initialize lock-free operations for hot paths
             lockFreeOps = new LockFreeAffinityOperations(platformProvider, hotPathCache, hftProfiler);

@@ -7,8 +7,6 @@ import com.faster.affinity.platform.PlatformProvider;
 import com.faster.affinity.performance.HFTPerformanceProfiler;
 import com.faster.affinity.annotations.HotPath;
 import com.faster.affinity.annotations.ColdPath;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.BitSet;
 
