@@ -36,6 +36,8 @@ public final class AffinityManager {
     private final NUMAManager numaManager;
     private final IRQManager irqManager;
     private final CPUGovernorManager cpuGovernorManager;
+    private final HugepageManager hugepageManager;
+    private final PrefetchManager prefetchManager;
     private final PlatformProvider platformProvider;
 
     // Caching and state management
@@ -65,6 +67,10 @@ public final class AffinityManager {
                 new IRQManager(platformProvider, config) : null;
         this.cpuGovernorManager = config.isGovernorControlEnabled() ?
                 new CPUGovernorManager(platformProvider, config) : null;
+        this.hugepageManager = config.isHugepageManagementEnabled() ?
+                new HugepageManager(platformProvider, config) : null;
+        this.prefetchManager = config.isMemoryPrefetchingEnabled() ?
+                new PrefetchManager(platformProvider, config) : null;
 
         logger.info("AffinityManager created with config: {}", config);
     }
@@ -153,6 +159,12 @@ public final class AffinityManager {
             if (cpuGovernorManager != null) {
                 cpuGovernorManager.initialize();
             }
+            if (hugepageManager != null) {
+                hugepageManager.initialize();
+            }
+            if (prefetchManager != null) {
+                prefetchManager.initialize();
+            }
 
             initialized.set(true);
             logger.info("AffinityManager initialized successfully: {}", caps);
@@ -163,6 +175,13 @@ public final class AffinityManager {
         } finally {
             initializing.set(false);
         }
+    }
+
+    /**
+     * Check if the AffinityManager is properly initialized
+     */
+    public boolean isInitialized() {
+        return initialized.get();
     }
 
     // Core CPU Affinity Operations
@@ -334,6 +353,22 @@ public final class AffinityManager {
         return cpuGovernorManager;
     }
 
+    public HugepageManager getHugepageManager() throws com.faster.affinity.exceptions.UnsupportedOperationException {
+        if (hugepageManager == null) {
+            throw new com.faster.affinity.exceptions.UnsupportedOperationException("getHugepageManager",
+                    "Hugepage management is disabled in configuration");
+        }
+        return hugepageManager;
+    }
+
+    public PrefetchManager getPrefetchManager() throws com.faster.affinity.exceptions.UnsupportedOperationException {
+        if (prefetchManager == null) {
+            throw new com.faster.affinity.exceptions.UnsupportedOperationException("getPrefetchManager",
+                    "Memory prefetching is disabled in configuration");
+        }
+        return prefetchManager;
+    }
+
     // CPU Governor Control operations (HFT performance optimization)
 
     public OperationResult<CPUGovernorManager.GovernorMode> getCurrentGovernor(int coreId) {
@@ -374,6 +409,90 @@ public final class AffinityManager {
                     "CPU governor control is disabled in configuration"));
         }
         return cpuGovernorManager.restoreOriginalGovernors();
+    }
+
+    // Hugepage Control operations (TLB miss reduction)
+
+    public OperationResult<HugepageManager.HugepageMode> getCurrentHugepageMode() {
+        if (hugepageManager == null) {
+            return OperationResult.failure(new com.faster.affinity.exceptions.UnsupportedOperationException("getCurrentHugepageMode",
+                    "Hugepage management is disabled in configuration"));
+        }
+        return hugepageManager.getCurrentMode();
+    }
+
+    public OperationResult<Void> setHugepageMode(HugepageManager.HugepageMode mode) {
+        if (hugepageManager == null) {
+            return OperationResult.failure(new com.faster.affinity.exceptions.UnsupportedOperationException("setHugepageMode",
+                    "Hugepage management is disabled in configuration"));
+        }
+        return hugepageManager.setMode(mode);
+    }
+
+    public OperationResult<HugepageManager.HugepageInfo> getHugepageInfo() {
+        if (hugepageManager == null) {
+            return OperationResult.failure(new com.faster.affinity.exceptions.UnsupportedOperationException("getHugepageInfo",
+                    "Hugepage management is disabled in configuration"));
+        }
+        return hugepageManager.getHugepageInfo();
+    }
+
+    public OperationResult<Void> configureHugepagesForHFT() {
+        if (hugepageManager == null) {
+            return OperationResult.failure(new com.faster.affinity.exceptions.UnsupportedOperationException("configureHugepagesForHFT",
+                    "Hugepage management is disabled in configuration"));
+        }
+        return hugepageManager.configureForHFT();
+    }
+
+    public OperationResult<Void> restoreOriginalHugepageSettings() {
+        if (hugepageManager == null) {
+            return OperationResult.failure(new com.faster.affinity.exceptions.UnsupportedOperationException("restoreOriginalHugepageSettings",
+                    "Hugepage management is disabled in configuration"));
+        }
+        return hugepageManager.restoreOriginalSettings();
+    }
+
+    // Memory Prefetching operations (cache optimization)
+
+    public OperationResult<Void> prefetchAddress(long address, PrefetchManager.PrefetchType type) {
+        if (prefetchManager == null) {
+            return OperationResult.failure(new com.faster.affinity.exceptions.UnsupportedOperationException("prefetchAddress",
+                    "Memory prefetching is disabled in configuration"));
+        }
+        return prefetchManager.prefetchAddress(address, type);
+    }
+
+    public OperationResult<Void> prefetchDataStructure(long baseAddress, int elementSize,
+                                                      int elementCount, PrefetchManager.AccessPattern pattern) {
+        if (prefetchManager == null) {
+            return OperationResult.failure(new com.faster.affinity.exceptions.UnsupportedOperationException("prefetchDataStructure",
+                    "Memory prefetching is disabled in configuration"));
+        }
+        return prefetchManager.prefetchDataStructure(baseAddress, elementSize, elementCount, pattern);
+    }
+
+    public OperationResult<Boolean> isOptimallyAligned(long address, int accessSize) {
+        if (prefetchManager == null) {
+            return OperationResult.failure(new com.faster.affinity.exceptions.UnsupportedOperationException("isOptimallyAligned",
+                    "Memory prefetching is disabled in configuration"));
+        }
+        return prefetchManager.isOptimallyAligned(address, accessSize);
+    }
+
+    public OperationResult<Long> alignAddressForPerformance(long address, int accessSize) {
+        if (prefetchManager == null) {
+            return OperationResult.failure(new com.faster.affinity.exceptions.UnsupportedOperationException("alignAddressForPerformance",
+                    "Memory prefetching is disabled in configuration"));
+        }
+        return prefetchManager.alignAddressForPerformance(address, accessSize);
+    }
+
+    public PrefetchManager.PrefetchConfig createHFTPrefetchConfig(PrefetchManager.AccessPattern pattern) {
+        if (prefetchManager == null) {
+            throw new IllegalStateException("Memory prefetching is disabled in configuration");
+        }
+        return prefetchManager.createHFTConfig(pattern);
     }
 
     // Validation and error handling
@@ -619,6 +738,22 @@ public final class AffinityManager {
                 cpuGovernorManager.shutdown();
             } catch (Exception e) {
                 logger.warn("Error shutting down CPU governor manager: {}", e.getMessage());
+            }
+        }
+
+        if (hugepageManager != null) {
+            try {
+                hugepageManager.shutdown();
+            } catch (Exception e) {
+                logger.warn("Error shutting down hugepage manager: {}", e.getMessage());
+            }
+        }
+
+        if (prefetchManager != null) {
+            try {
+                prefetchManager.shutdown();
+            } catch (Exception e) {
+                logger.warn("Error shutting down prefetch manager: {}", e.getMessage());
             }
         }
 

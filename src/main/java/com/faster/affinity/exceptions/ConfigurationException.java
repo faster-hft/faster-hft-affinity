@@ -11,5 +11,10 @@ public class ConfigurationException extends RuntimeException {
         this.operation = operation;
     }
 
+    public ConfigurationException(String operation, String message, Throwable cause) {
+        super(message, cause);
+        this.operation = operation;
+    }
+
     public String getOperation() { return operation; }
 }

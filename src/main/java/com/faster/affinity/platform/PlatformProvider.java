@@ -64,6 +64,23 @@ public interface PlatformProvider {
     long getCpuMinFrequency(int coreId);
     long getCpuMaxFrequency(int coreId);
 
+    // Hugepage Control (for TLB miss reduction)
+    String getHugepageMode();
+    int setHugepageMode(String mode);
+    String getHugepageAllocationPolicy();
+    int setHugepageAllocationPolicy(String policy);
+    boolean isHugepageDefragmentationEnabled();
+    int setHugepageDefragmentationEnabled(boolean enabled);
+    long getTotalHugepages();
+    long getFreeHugepages();
+    long getHugepageSize();
+
+    // Memory Prefetching (for cache optimization)
+    int prefetchMemory(long address, int prefetchType);
+    int prefetchMemoryRange(long startAddress, long endAddress, int prefetchType, int stride);
+    boolean isMemoryAligned(long address, int alignment);
+    long alignMemoryAddress(long address, int alignment);
+
     // Platform-specific capabilities
     boolean supportsFeature(String feature);
     void initialize() throws Exception;

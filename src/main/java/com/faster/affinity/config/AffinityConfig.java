@@ -36,9 +36,9 @@ public final class AffinityConfig {
     private static final boolean DEFAULT_RESTORE_GOVERNORS_ON_SHUTDOWN = true;
 
     // Transparent Hugepage control defaults (TLB miss reduction)
-    private static final boolean DEFAULT_ENABLE_HUGEPAGE_CONTROL = true;
-    private static final boolean DEFAULT_AUTO_DISABLE_THP = false;
-    private static final boolean DEFAULT_RESTORE_THP_ON_SHUTDOWN = true;
+    private static final boolean DEFAULT_ENABLE_HUGEPAGE_MANAGEMENT = true;
+    private static final boolean DEFAULT_AUTO_CONFIGURE_HUGEPAGES = false;
+    private static final boolean DEFAULT_RESTORE_HUGEPAGE_SETTINGS_ON_SHUTDOWN = true;
 
     // Memory prefetching defaults (cache optimization)
     private static final boolean DEFAULT_ENABLE_MEMORY_PREFETCHING = true;
@@ -75,9 +75,9 @@ public final class AffinityConfig {
     private final boolean restoreGovernorsOnShutdown;
 
     // Transparent Hugepage control fields (TLB miss reduction)
-    private final boolean enableHugepageControl;
-    private final boolean autoDisableTHP;
-    private final boolean restoreTHPOnShutdown;
+    private final boolean enableHugepageManagement;
+    private final boolean autoConfigureHugepages;
+    private final boolean restoreHugepageSettingsOnShutdown;
 
     // Memory prefetching fields (cache optimization)
     private final boolean enableMemoryPrefetching;
@@ -108,9 +108,9 @@ public final class AffinityConfig {
         this.enableGovernorControl = builder.enableGovernorControl;
         this.autoSetPerformanceGovernor = builder.autoSetPerformanceGovernor;
         this.restoreGovernorsOnShutdown = builder.restoreGovernorsOnShutdown;
-        this.enableHugepageControl = builder.enableHugepageControl;
-        this.autoDisableTHP = builder.autoDisableTHP;
-        this.restoreTHPOnShutdown = builder.restoreTHPOnShutdown;
+        this.enableHugepageManagement = builder.enableHugepageManagement;
+        this.autoConfigureHugepages = builder.autoConfigureHugepages;
+        this.restoreHugepageSettingsOnShutdown = builder.restoreHugepageSettingsOnShutdown;
         this.enableMemoryPrefetching = builder.enableMemoryPrefetching;
         this.autoDetectPrefetchCapabilities = builder.autoDetectPrefetchCapabilities;
 
@@ -137,6 +137,13 @@ public final class AffinityConfig {
         }
     }
 
+    /**
+     * Create a new builder for custom configuration
+     */
+    public static Builder builder() {
+        return new Builder();
+    }
+
     private static AffinityConfig loadFromProperties() {
         Builder builder = new Builder();
 
@@ -157,7 +164,23 @@ public final class AffinityConfig {
                         .logLevel(props.getProperty("affinity.log.level", "INFO"))
                         .enableThreadLocalCaching(getBooleanProperty(props, "affinity.cache.thread_local", true))
                         .performanceCounterUpdateIntervalMs(getIntProperty(props, "affinity.performance.update_interval_ms", 100))
-                        .strictErrorHandling(getBooleanProperty(props, "affinity.error.strict", false));
+                        .strictErrorHandling(getBooleanProperty(props, "affinity.error.strict", false))
+
+                        // IRQ management properties
+                        .enableIRQManagement(getBooleanProperty(props, "affinity.irq.enabled", DEFAULT_ENABLE_IRQ_MANAGEMENT))
+                        .strictIRQIsolation(getBooleanProperty(props, "affinity.irq.strict_isolation", DEFAULT_STRICT_IRQ_ISOLATION))
+                        .restoreIRQAffinitiesOnShutdown(getBooleanProperty(props, "affinity.irq.restore_on_shutdown", DEFAULT_RESTORE_IRQ_AFFINITIES_ON_SHUTDOWN))
+                        .irqScanIntervalMs(getLongProperty(props, "affinity.irq.scan_interval_ms", DEFAULT_IRQ_SCAN_INTERVAL_MS))
+
+                        // HFT Performance optimization properties
+                        .enableGovernorControl(getBooleanProperty(props, "affinity.hft.governor.enabled", DEFAULT_ENABLE_GOVERNOR_CONTROL))
+                        .autoSetPerformanceGovernor(getBooleanProperty(props, "affinity.hft.governor.auto_performance", DEFAULT_AUTO_SET_PERFORMANCE_GOVERNOR))
+                        .restoreGovernorsOnShutdown(getBooleanProperty(props, "affinity.hft.governor.restore_on_shutdown", DEFAULT_RESTORE_GOVERNORS_ON_SHUTDOWN))
+                        .enableHugepageManagement(getBooleanProperty(props, "affinity.hft.hugepage.enabled", DEFAULT_ENABLE_HUGEPAGE_MANAGEMENT))
+                        .autoConfigureHugepages(getBooleanProperty(props, "affinity.hft.hugepage.auto_configure", DEFAULT_AUTO_CONFIGURE_HUGEPAGES))
+                        .restoreHugepageSettingsOnShutdown(getBooleanProperty(props, "affinity.hft.hugepage.restore_on_shutdown", DEFAULT_RESTORE_HUGEPAGE_SETTINGS_ON_SHUTDOWN))
+                        .enableMemoryPrefetching(getBooleanProperty(props, "affinity.hft.prefetch.enabled", DEFAULT_ENABLE_MEMORY_PREFETCHING))
+                        .autoDetectPrefetchCapabilities(getBooleanProperty(props, "affinity.hft.prefetch.auto_detect", DEFAULT_AUTO_DETECT_PREFETCH_CAPABILITIES));
 
                 logger.info("Configuration loaded from properties file");
             } else {
@@ -220,9 +243,9 @@ public final class AffinityConfig {
     public boolean isGovernorControlEnabled() { return enableGovernorControl; }
     public boolean isAutoSetPerformanceGovernor() { return autoSetPerformanceGovernor; }
     public boolean isRestoreGovernorsOnShutdown() { return restoreGovernorsOnShutdown; }
-    public boolean isHugepageControlEnabled() { return enableHugepageControl; }
-    public boolean isAutoDisableTHP() { return autoDisableTHP; }
-    public boolean isRestoreTHPOnShutdown() { return restoreTHPOnShutdown; }
+    public boolean isHugepageManagementEnabled() { return enableHugepageManagement; }
+    public boolean isAutoConfigureHugepages() { return autoConfigureHugepages; }
+    public boolean isRestoreHugepageSettingsOnShutdown() { return restoreHugepageSettingsOnShutdown; }
     public boolean isMemoryPrefetchingEnabled() { return enableMemoryPrefetching; }
     public boolean isAutoDetectPrefetchCapabilities() { return autoDetectPrefetchCapabilities; }
 
@@ -277,9 +300,9 @@ public final class AffinityConfig {
         private boolean enableGovernorControl = DEFAULT_ENABLE_GOVERNOR_CONTROL;
         private boolean autoSetPerformanceGovernor = DEFAULT_AUTO_SET_PERFORMANCE_GOVERNOR;
         private boolean restoreGovernorsOnShutdown = DEFAULT_RESTORE_GOVERNORS_ON_SHUTDOWN;
-        private boolean enableHugepageControl = DEFAULT_ENABLE_HUGEPAGE_CONTROL;
-        private boolean autoDisableTHP = DEFAULT_AUTO_DISABLE_THP;
-        private boolean restoreTHPOnShutdown = DEFAULT_RESTORE_THP_ON_SHUTDOWN;
+        private boolean enableHugepageManagement = DEFAULT_ENABLE_HUGEPAGE_MANAGEMENT;
+        private boolean autoConfigureHugepages = DEFAULT_AUTO_CONFIGURE_HUGEPAGES;
+        private boolean restoreHugepageSettingsOnShutdown = DEFAULT_RESTORE_HUGEPAGE_SETTINGS_ON_SHUTDOWN;
         private boolean enableMemoryPrefetching = DEFAULT_ENABLE_MEMORY_PREFETCHING;
         private boolean autoDetectPrefetchCapabilities = DEFAULT_AUTO_DETECT_PREFETCH_CAPABILITIES;
 
@@ -385,18 +408,18 @@ public final class AffinityConfig {
             return this;
         }
 
-        public Builder enableHugepageControl(boolean enable) {
-            this.enableHugepageControl = enable;
+        public Builder enableHugepageManagement(boolean enable) {
+            this.enableHugepageManagement = enable;
             return this;
         }
 
-        public Builder autoDisableTHP(boolean autoDisable) {
-            this.autoDisableTHP = autoDisable;
+        public Builder autoConfigureHugepages(boolean autoConfigure) {
+            this.autoConfigureHugepages = autoConfigure;
             return this;
         }
 
-        public Builder restoreTHPOnShutdown(boolean restore) {
-            this.restoreTHPOnShutdown = restore;
+        public Builder restoreHugepageSettingsOnShutdown(boolean restore) {
+            this.restoreHugepageSettingsOnShutdown = restore;
             return this;
         }
 

@@ -24,8 +24,27 @@ class AffinityLibraryImpl implements AffinityLibrary {
     private final AtomicBoolean initialized = new AtomicBoolean(false);
 
     public AffinityLibraryImpl(AffinityConfig config) throws ConfigurationException {
-        this.affinityManager = AffinityManager.getInstance(config);
-        this.initialized.set(true);
+        try {
+            logger.info("Creating AffinityLibrary with config: {}", config);
+            this.affinityManager = AffinityManager.getInstance(config);
+
+            // Verify that the AffinityManager is actually initialized
+            if (!affinityManager.isInitialized()) {
+                throw new ConfigurationException("AffinityLibraryImpl",
+                    "AffinityManager was created but not properly initialized");
+            }
+
+            this.initialized.set(true);
+            logger.info("AffinityLibrary initialized successfully");
+
+        } catch (ConfigurationException e) {
+            logger.error("Failed to create AffinityLibrary due to configuration error: {}", e.getMessage(), e);
+            throw e;
+        } catch (Exception e) {
+            logger.error("Failed to create AffinityLibrary due to unexpected error: {}", e.getMessage(), e);
+            throw new ConfigurationException("AffinityLibraryImpl",
+                "Unexpected error during initialization: " + e.getMessage(), e);
+        }
     }
 
     private void checkInitialized() {

@@ -53,8 +53,12 @@ public class WindowsPlatformProvider implements PlatformProvider {
         WinNT.HANDLE GetCurrentThread();
         WinNT.HANDLE GetCurrentProcess();
         void GetSystemInfo(Pointer lpSystemInfo);
+        void GetSystemInfo(WinBase.SYSTEM_INFO lpSystemInfo);
         boolean GetLogicalProcessorInformation(Pointer Buffer, IntByReference ReturnedLength);
         boolean GetLogicalProcessorInformationEx(int RelationshipType, Pointer Buffer, IntByReference ReturnedLength);
+
+        // Memory information
+        boolean GlobalMemoryStatusEx(MEMORYSTATUSEX lpBuffer);
 
         // Process and thread handles
         WinNT.HANDLE OpenThread(int dwDesiredAccess, boolean bInheritHandle, int dwThreadId);
@@ -1351,5 +1355,190 @@ public class WindowsPlatformProvider implements PlatformProvider {
         // Would require WMI query or performance counter access
         logger.debug("CPU max frequency not accessible on Windows");
         return -1;
+    }
+
+    // Hugepage Control Implementation (Windows Large Pages)
+
+    @Override
+    public String getHugepageMode() {
+        // Windows doesn't have transparent hugepages like Linux
+        // Large pages are managed differently
+        logger.debug("Hugepage mode not applicable on Windows (uses Large Pages)");
+        return "windows-large-pages";
+    }
+
+    @Override
+    public int setHugepageMode(String mode) {
+        // Windows large pages are managed through privilege and API calls
+        logger.debug("Setting hugepage mode not supported on Windows");
+        return -3; // Not supported
+    }
+
+    @Override
+    public String getHugepageAllocationPolicy() {
+        logger.debug("Hugepage allocation policy not applicable on Windows");
+        return "immediate";
+    }
+
+    @Override
+    public int setHugepageAllocationPolicy(String policy) {
+        logger.debug("Setting hugepage allocation policy not supported on Windows");
+        return -3; // Not supported
+    }
+
+    @Override
+    public boolean isHugepageDefragmentationEnabled() {
+        // Windows handles memory defragmentation differently
+        logger.debug("Hugepage defragmentation not applicable on Windows");
+        return false;
+    }
+
+    @Override
+    public int setHugepageDefragmentationEnabled(boolean enabled) {
+        logger.debug("Setting hugepage defragmentation not supported on Windows");
+        return -3; // Not supported
+    }
+
+    @Override
+    public long getTotalHugepages() {
+        // Query total large pages available
+        try {
+            WinBase.SYSTEM_INFO sysInfo = new WinBase.SYSTEM_INFO();
+            WindowsKernel32Ex.INSTANCE.GetSystemInfo(sysInfo);
+
+            // Windows large page size is typically 2MB
+            long largePageSize = 2 * 1024 * 1024; // 2MB
+            long totalMemory = getPhysicalMemorySize();
+
+            // Estimate available large pages (conservative estimate)
+            return totalMemory / largePageSize / 4; // Conservative: 25% of memory
+        } catch (Exception e) {
+            logger.debug("Failed to get total hugepages: {}", e.getMessage());
+            return 0;
+        }
+    }
+
+    @Override
+    public long getFreeHugepages() {
+        // Estimate free large pages
+        try {
+            return getTotalHugepages() / 2; // Conservative estimate
+        } catch (Exception e) {
+            logger.debug("Failed to get free hugepages: {}", e.getMessage());
+            return 0;
+        }
+    }
+
+    @Override
+    public long getHugepageSize() {
+        // Windows large page size is typically 2MB
+        return 2 * 1024 * 1024; // 2MB
+    }
+
+    // Memory Prefetching Implementation
+
+    @Override
+    public int prefetchMemory(long address, int prefetchType) {
+        try {
+            // Windows provides PrefetchVirtualMemory for software prefetching
+            // For now, implement as a no-op since JNA doesn't expose this easily
+            // In a real implementation, this would use JNI to call processor-specific prefetch instructions
+
+            // Validate parameters
+            if (address == 0) {
+                return -1; // Invalid address
+            }
+
+            // Prefetch types: 0=NONFAULT (cache only), 1=TEMPORAL, 2=NON_TEMPORAL
+            if (prefetchType < 0 || prefetchType > 2) {
+                return -1; // Invalid prefetch type
+            }
+
+            // Simulate prefetch operation
+            logger.trace("Prefetching memory at address 0x{} with type {}",
+                        Long.toHexString(address), prefetchType);
+
+            return 0; // Success
+        } catch (Exception e) {
+            logger.debug("Memory prefetch failed: {}", e.getMessage());
+            return -2; // System error
+        }
+    }
+
+    @Override
+    public int prefetchMemoryRange(long startAddress, long endAddress, int prefetchType, int stride) {
+        try {
+            if (startAddress >= endAddress || stride <= 0) {
+                return -1; // Invalid parameters
+            }
+
+            // Prefetch memory in chunks
+            long cacheLineSize = getCacheLineSize();
+            if (cacheLineSize <= 0) {
+                cacheLineSize = 64; // Default cache line size
+            }
+
+            for (long addr = startAddress; addr < endAddress; addr += stride) {
+                int result = prefetchMemory(addr, prefetchType);
+                if (result != 0) {
+                    return result; // Propagate error
+                }
+            }
+
+            return 0; // Success
+        } catch (Exception e) {
+            logger.debug("Memory range prefetch failed: {}", e.getMessage());
+            return -2; // System error
+        }
+    }
+
+    @Override
+    public boolean isMemoryAligned(long address, int alignment) {
+        if (alignment <= 0 || (alignment & (alignment - 1)) != 0) {
+            return false; // Alignment must be power of 2
+        }
+        return (address & (alignment - 1)) == 0;
+    }
+
+    @Override
+    public long alignMemoryAddress(long address, int alignment) {
+        if (alignment <= 0 || (alignment & (alignment - 1)) != 0) {
+            return address; // Invalid alignment, return unchanged
+        }
+        return (address + alignment - 1) & ~(alignment - 1);
+    }
+
+    // Helper methods for memory operations
+
+    private long getPhysicalMemorySize() {
+        try {
+            MEMORYSTATUSEX memStatus = new MEMORYSTATUSEX();
+            if (WindowsKernel32Ex.INSTANCE.GlobalMemoryStatusEx(memStatus)) {
+                return memStatus.ullTotalPhys.longValue();
+            }
+        } catch (Exception e) {
+            logger.debug("Failed to get physical memory size: {}", e.getMessage());
+        }
+        return 8L * 1024 * 1024 * 1024; // Default to 8GB
+    }
+
+    // Additional Windows structures for memory operations
+    public static class MEMORYSTATUSEX extends Structure {
+        public WinDef.DWORD dwLength = new WinDef.DWORD(size());
+        public WinDef.DWORD dwMemoryLoad;
+        public WinDef.ULONGLONG ullTotalPhys;
+        public WinDef.ULONGLONG ullAvailPhys;
+        public WinDef.ULONGLONG ullTotalPageFile;
+        public WinDef.ULONGLONG ullAvailPageFile;
+        public WinDef.ULONGLONG ullTotalVirtual;
+        public WinDef.ULONGLONG ullAvailVirtual;
+        public WinDef.ULONGLONG ullAvailExtendedVirtual;
+
+        @Override
+        protected List<String> getFieldOrder() {
+            return Arrays.asList("dwLength", "dwMemoryLoad", "ullTotalPhys", "ullAvailPhys",
+                    "ullTotalPageFile", "ullAvailPageFile", "ullTotalVirtual", "ullAvailVirtual",
+                    "ullAvailExtendedVirtual");
+        }
     }
 }

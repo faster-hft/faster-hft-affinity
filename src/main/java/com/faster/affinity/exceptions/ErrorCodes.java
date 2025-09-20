@@ -25,6 +25,7 @@ public final class ErrorCodes {
     public static final int ERROR_PROCESS_NOT_FOUND = -13;
     public static final int ERROR_KERNEL_VERSION_UNSUPPORTED = -14;
     public static final int ERROR_PERFORMANCE_COUNTERS_UNAVAILABLE = -15;
+    public static final int ERROR_OPERATION_FAILED = -16;
 
     private static final Map<Integer, String> ERROR_DESCRIPTIONS = new HashMap<>();
 
@@ -45,6 +46,7 @@ public final class ErrorCodes {
         ERROR_DESCRIPTIONS.put(ERROR_PROCESS_NOT_FOUND, "Specified process not found");
         ERROR_DESCRIPTIONS.put(ERROR_KERNEL_VERSION_UNSUPPORTED, "Kernel version not supported");
         ERROR_DESCRIPTIONS.put(ERROR_PERFORMANCE_COUNTERS_UNAVAILABLE, "Performance counters not available");
+        ERROR_DESCRIPTIONS.put(ERROR_OPERATION_FAILED, "General operation failure");
     }
 
     private ErrorCodes() {

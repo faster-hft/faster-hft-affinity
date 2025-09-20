@@ -27,6 +27,12 @@ class TopologyDetectorTest {
     @BeforeAll
     void setUp() {
         MockitoAnnotations.openMocks(this);
+        topologyDetector = new TopologyDetector(mockPlatformProvider, mockConfig);
+    }
+
+    @BeforeEach
+    void setUpEach() {
+        reset(mockPlatformProvider, mockConfig);
 
         when(mockConfig.isCachingEnabled()).thenReturn(false);
         when(mockConfig.isParameterValidationEnabled()).thenReturn(true);
@@ -35,8 +41,7 @@ class TopologyDetectorTest {
         when(mockPlatformProvider.getSocketCount()).thenReturn(2);
         when(mockPlatformProvider.getCoresPerSocket()).thenReturn(4);
         when(mockPlatformProvider.getNumaNodeCount()).thenReturn(2);
-
-        topologyDetector = new TopologyDetector(mockPlatformProvider, mockConfig);
+        when(mockPlatformProvider.getMaxCacheLevel()).thenReturn(3);
     }
 
     @Test
@@ -74,9 +79,18 @@ class TopologyDetectorTest {
         topologyDetector.initialize();
 
         assertEquals(3, topologyDetector.getMaxCacheLevel());
-        assertEquals(32768L, topologyDetector.getCacheSize(1));
-        assertEquals(262144L, topologyDetector.getCacheSize(2));
-        assertEquals(8388608L, topologyDetector.getCacheSize(3));
+
+        OperationResult<Long> cache1Result = topologyDetector.getCacheSize(1);
+        assertTrue(cache1Result.isSuccess());
+        assertEquals(32768L, cache1Result.getValue());
+
+        OperationResult<Long> cache2Result = topologyDetector.getCacheSize(2);
+        assertTrue(cache2Result.isSuccess());
+        assertEquals(262144L, cache2Result.getValue());
+
+        OperationResult<Long> cache3Result = topologyDetector.getCacheSize(3);
+        assertTrue(cache3Result.isSuccess());
+        assertEquals(8388608L, cache3Result.getValue());
     }
 
     @Test

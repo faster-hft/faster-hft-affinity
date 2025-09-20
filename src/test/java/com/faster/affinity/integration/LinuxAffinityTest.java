@@ -24,11 +24,39 @@ public class LinuxAffinityTest {
 
     @BeforeAll
     void setUp() {
-        this.affinityLib = AffinityLibraryFactory.getDefault();
+        try {
+            // Create a test-friendly configuration
+            com.faster.affinity.config.AffinityConfig testConfig = com.faster.affinity.config.AffinityConfig.builder()
+                .enablePerformanceCounters(false)  // Disable to avoid initialization issues
+                .enableNumaOperations(false)       // Disable to avoid NUMA issues in tests
+                .enableIRQManagement(false)        // Disable to avoid permission issues
+                .enableGovernorControl(false)      // Disable HFT feature for basic tests
+                .enableHugepageManagement(false)   // Disable HFT feature for basic tests
+                .enableMemoryPrefetching(false)    // Disable HFT feature for basic tests
+                .operationTimeoutMs(5000)          // Shorter timeout for tests
+                .maxRetryAttempts(1)               // Fewer retries for tests
+                .developerMode(true)               // Enable debug logging
+                .build();
+
+            this.affinityLib = AffinityLibraryFactory.create(testConfig);
+
+        } catch (Exception e) {
+            System.err.println("Failed to create with test config, falling back to default: " + e.getMessage());
+            e.printStackTrace();
+            try {
+                this.affinityLib = AffinityLibraryFactory.getDefault();
+            } catch (Exception defaultError) {
+                System.err.println("Default creation also failed: " + defaultError.getMessage());
+                defaultError.printStackTrace();
+                throw new IllegalStateException("Affinity library failed to initialize: " + defaultError.getMessage(), defaultError);
+            }
+        }
 
         if (!affinityLib.isInitialized()) {
-            throw new IllegalStateException("Affinity library failed to initialize");
+            throw new IllegalStateException("Affinity library failed to initialize - isInitialized() returned false");
         }
+
+        System.out.println("Linux affinity test setup completed successfully");
     }
 
     @AfterAll

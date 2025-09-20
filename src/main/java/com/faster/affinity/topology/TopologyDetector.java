@@ -104,6 +104,8 @@ public final class TopologyDetector {
 
         } catch (AffinityException e) {
             return OperationResult.failure(e);
+        } catch (RuntimeException e) {
+            return OperationResult.failure(new OperationFailedException("getCacheLevelCores", e.getMessage()));
         }
     }
 
@@ -318,9 +320,11 @@ public final class TopologyDetector {
             case ERROR_NOT_SUPPORTED:
                 return new UnsupportedOperationException(operation);
             case ERROR_INVALID_PARAMETER:
-                return new InvalidParameterException(operation, "Invalid parameters");
+                return new InvalidParameterException(operation, "parameter", "Invalid parameters");
+            case ERROR_HARDWARE_NOT_AVAILABLE:
+                return new HardwareException(operation, "Hardware not available");
             default:
-                return new SystemCallException(operation, "platform_call", null);
+                return new SystemCallException(operation, "platform_call", errorCode);
         }
     }
 
