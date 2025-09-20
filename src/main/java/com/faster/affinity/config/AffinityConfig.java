@@ -24,6 +24,12 @@ public final class AffinityConfig {
     private static final long DEFAULT_CACHE_EXPIRY_MS = 5000;
     private static final boolean DEFAULT_DEVELOPER_MODE = false;
 
+    // IRQ management defaults
+    private static final boolean DEFAULT_ENABLE_IRQ_MANAGEMENT = true;
+    private static final boolean DEFAULT_STRICT_IRQ_ISOLATION = false;
+    private static final boolean DEFAULT_RESTORE_IRQ_AFFINITIES_ON_SHUTDOWN = true;
+    private static final long DEFAULT_IRQ_SCAN_INTERVAL_MS = 30000; // 30 seconds
+
     // Configuration instance
     private static volatile AffinityConfig instance;
     private static final Object lock = new Object();
@@ -43,6 +49,12 @@ public final class AffinityConfig {
     private final int performanceCounterUpdateIntervalMs;
     private final boolean strictErrorHandling;
 
+    // IRQ management fields
+    private final boolean enableIRQManagement;
+    private final boolean strictIRQIsolation;
+    private final boolean restoreIRQAffinitiesOnShutdown;
+    private final long irqScanIntervalMs;
+
     private AffinityConfig(Builder builder) {
         this.enablePerformanceCounters = builder.enablePerformanceCounters;
         this.enableRealtimeFeatures = builder.enableRealtimeFeatures;
@@ -57,6 +69,12 @@ public final class AffinityConfig {
         this.enableThreadLocalCaching = builder.enableThreadLocalCaching;
         this.performanceCounterUpdateIntervalMs = builder.performanceCounterUpdateIntervalMs;
         this.strictErrorHandling = builder.strictErrorHandling;
+
+        // IRQ management initialization
+        this.enableIRQManagement = builder.enableIRQManagement;
+        this.strictIRQIsolation = builder.strictIRQIsolation;
+        this.restoreIRQAffinitiesOnShutdown = builder.restoreIRQAffinitiesOnShutdown;
+        this.irqScanIntervalMs = builder.irqScanIntervalMs;
 
         if (developerMode) {
             logger.info("AffinityConfig initialized in developer mode: {}", this);
@@ -154,6 +172,12 @@ public final class AffinityConfig {
     public int getPerformanceCounterUpdateIntervalMs() { return performanceCounterUpdateIntervalMs; }
     public boolean isStrictErrorHandlingEnabled() { return strictErrorHandling; }
 
+    // IRQ management getters
+    public boolean isIRQManagementEnabled() { return enableIRQManagement; }
+    public boolean isStrictIRQIsolation() { return strictIRQIsolation; }
+    public boolean isRestoreIRQAffinitiesOnShutdown() { return restoreIRQAffinitiesOnShutdown; }
+    public long getIRQScanInterval() { return irqScanIntervalMs; }
+
     // Validation methods
     public void validateConfiguration() {
         if (maxRetryAttempts < 0 || maxRetryAttempts > 10) {
@@ -167,6 +191,9 @@ public final class AffinityConfig {
         }
         if (performanceCounterUpdateIntervalMs < 10) {
             throw new IllegalArgumentException("performanceCounterUpdateIntervalMs must be at least 10ms");
+        }
+        if (irqScanIntervalMs < 1000) {
+            throw new IllegalArgumentException("irqScanIntervalMs must be at least 1000ms");
         }
     }
 
@@ -191,6 +218,12 @@ public final class AffinityConfig {
         private boolean enableThreadLocalCaching = true;
         private int performanceCounterUpdateIntervalMs = 100;
         private boolean strictErrorHandling = false;
+
+        // IRQ management builder fields
+        private boolean enableIRQManagement = DEFAULT_ENABLE_IRQ_MANAGEMENT;
+        private boolean strictIRQIsolation = DEFAULT_STRICT_IRQ_ISOLATION;
+        private boolean restoreIRQAffinitiesOnShutdown = DEFAULT_RESTORE_IRQ_AFFINITIES_ON_SHUTDOWN;
+        private long irqScanIntervalMs = DEFAULT_IRQ_SCAN_INTERVAL_MS;
 
         public Builder enablePerformanceCounters(boolean enable) {
             this.enablePerformanceCounters = enable;
@@ -254,6 +287,27 @@ public final class AffinityConfig {
 
         public Builder strictErrorHandling(boolean strict) {
             this.strictErrorHandling = strict;
+            return this;
+        }
+
+        // IRQ management builder methods
+        public Builder enableIRQManagement(boolean enable) {
+            this.enableIRQManagement = enable;
+            return this;
+        }
+
+        public Builder strictIRQIsolation(boolean strict) {
+            this.strictIRQIsolation = strict;
+            return this;
+        }
+
+        public Builder restoreIRQAffinitiesOnShutdown(boolean restore) {
+            this.restoreIRQAffinitiesOnShutdown = restore;
+            return this;
+        }
+
+        public Builder irqScanIntervalMs(long intervalMs) {
+            this.irqScanIntervalMs = intervalMs;
             return this;
         }
 

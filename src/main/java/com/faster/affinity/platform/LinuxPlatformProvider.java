@@ -318,6 +318,11 @@ public class LinuxPlatformProvider implements PlatformProvider {
             features.add("cache_miss_tracking");
         }
 
+        // IRQ management support (always available on Linux)
+        features.add("irq_management");
+        features.add("irq_isolation");
+        features.add("interrupt_control");
+
         return features.toArray(new String[0]);
     }
 
@@ -1201,6 +1206,272 @@ public class LinuxPlatformProvider implements PlatformProvider {
         public void updateUtilization(double util) {
             this.utilization = util;
             this.lastUpdateTime = System.currentTimeMillis();
+        }
+    }
+
+    // IRQ (Interrupt Request) management implementation
+
+    @Override
+    public int getIrqCount() {
+        try {
+            Path interruptsPath = Paths.get("/proc/interrupts");
+            if (!Files.exists(interruptsPath)) {
+                return 0;
+            }
+
+            long count = Files.lines(interruptsPath)
+                .skip(1) // Skip header line
+                .filter(line -> !line.trim().isEmpty())
+                .filter(line -> line.matches("^\\s*\\d+:.*")) // Lines starting with IRQ number
+                .count();
+
+            return (int) count;
+
+        } catch (Exception e) {
+            logger.debug("Failed to get IRQ count: {}", e.getMessage());
+            return 0;
+        }
+    }
+
+    @Override
+    public int[] getAllIrqNumbers() {
+        try {
+            Path interruptsPath = Paths.get("/proc/interrupts");
+            if (!Files.exists(interruptsPath)) {
+                return new int[0];
+            }
+
+            List<Integer> irqNumbers = new ArrayList<>();
+
+            try (BufferedReader reader = Files.newBufferedReader(interruptsPath)) {
+                String line;
+                reader.readLine(); // Skip header
+
+                while ((line = reader.readLine()) != null) {
+                    line = line.trim();
+                    if (line.isEmpty()) continue;
+
+                    // Parse IRQ number from the beginning of the line
+                    String[] parts = line.split(":", 2);
+                    if (parts.length >= 2) {
+                        try {
+                            int irqNumber = Integer.parseInt(parts[0].trim());
+                            irqNumbers.add(irqNumber);
+                        } catch (NumberFormatException e) {
+                            // Skip lines that don't start with a number
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            return irqNumbers.stream().mapToInt(Integer::intValue).toArray();
+
+        } catch (Exception e) {
+            logger.debug("Failed to get IRQ numbers: {}", e.getMessage());
+            return new int[0];
+        }
+    }
+
+    @Override
+    public String getIrqDescription(int irqNumber) {
+        try {
+            Path interruptsPath = Paths.get("/proc/interrupts");
+            if (!Files.exists(interruptsPath)) {
+                return "unknown";
+            }
+
+            try (BufferedReader reader = Files.newBufferedReader(interruptsPath)) {
+                String line;
+                reader.readLine(); // Skip header
+
+                while ((line = reader.readLine()) != null) {
+                    line = line.trim();
+                    if (line.isEmpty()) continue;
+
+                    String[] parts = line.split(":", 2);
+                    if (parts.length >= 2) {
+                        try {
+                            int lineIrqNumber = Integer.parseInt(parts[0].trim());
+                            if (lineIrqNumber == irqNumber) {
+                                // Extract description from the end of the line
+                                String rightPart = parts[1].trim();
+                                // Split by whitespace and take the last meaningful parts
+                                String[] descParts = rightPart.split("\\s+");
+                                if (descParts.length >= 3) {
+                                    // Format: count count ... type device
+                                    StringBuilder desc = new StringBuilder();
+                                    // Skip the per-CPU counts, get type and device
+                                    for (int i = getCpuCount(); i < descParts.length; i++) {
+                                        if (i > getCpuCount()) desc.append(" ");
+                                        desc.append(descParts[i]);
+                                    }
+                                    return desc.toString();
+                                } else {
+                                    return rightPart;
+                                }
+                            }
+                        } catch (NumberFormatException e) {
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            return "IRQ " + irqNumber;
+
+        } catch (Exception e) {
+            logger.debug("Failed to get IRQ {} description: {}", irqNumber, e.getMessage());
+            return "unknown";
+        }
+    }
+
+    @Override
+    public int getIrqAffinity(int irqNumber, long[] cpuMask, int maskLength) {
+        if (cpuMask == null || maskLength <= 0) {
+            return ErrorCodes.ERROR_INVALID_PARAMETER;
+        }
+
+        try {
+            Path affinityPath = Paths.get("/proc/irq/" + irqNumber + "/smp_affinity");
+            if (!Files.exists(affinityPath)) {
+                return ErrorCodes.ERROR_NOT_SUPPORTED;
+            }
+
+            String affinityHex = Files.readString(affinityPath).trim();
+            if (affinityHex.isEmpty()) {
+                return ErrorCodes.ERROR_SYSTEM_CALL_FAILED;
+            }
+
+            // Remove any commas (used for grouping in long hex strings)
+            affinityHex = affinityHex.replace(",", "");
+
+            // Parse hex string to long array
+            Arrays.fill(cpuMask, 0);
+
+            try {
+                if (affinityHex.length() <= 16) {
+                    // Single long value
+                    cpuMask[0] = Long.parseUnsignedLong(affinityHex, 16);
+                } else {
+                    // Multiple long values for systems with >64 cores
+                    for (int i = 0; i < Math.min(cpuMask.length, (affinityHex.length() + 15) / 16); i++) {
+                        int startPos = Math.max(0, affinityHex.length() - (i + 1) * 16);
+                        int endPos = affinityHex.length() - i * 16;
+                        String hexChunk = affinityHex.substring(startPos, endPos);
+                        cpuMask[i] = Long.parseUnsignedLong(hexChunk, 16);
+                    }
+                }
+                return ErrorCodes.SUCCESS;
+
+            } catch (NumberFormatException e) {
+                logger.debug("Failed to parse IRQ {} affinity hex '{}': {}", irqNumber, affinityHex, e.getMessage());
+                return ErrorCodes.ERROR_SYSTEM_CALL_FAILED;
+            }
+
+        } catch (IOException e) {
+            if (e.getMessage() != null && e.getMessage().contains("Permission denied")) {
+                return ErrorCodes.ERROR_PERMISSION_DENIED;
+            }
+            logger.debug("Failed to read IRQ {} affinity: {}", irqNumber, e.getMessage());
+            return ErrorCodes.ERROR_SYSTEM_CALL_FAILED;
+        } catch (Exception e) {
+            logger.debug("Failed to get IRQ {} affinity: {}", irqNumber, e.getMessage());
+            return ErrorCodes.ERROR_SYSTEM_CALL_FAILED;
+        }
+    }
+
+    @Override
+    public int setIrqAffinity(int irqNumber, long[] cpuMask, int maskLength) {
+        if (cpuMask == null || maskLength <= 0) {
+            return ErrorCodes.ERROR_INVALID_PARAMETER;
+        }
+
+        try {
+            Path affinityPath = Paths.get("/proc/irq/" + irqNumber + "/smp_affinity");
+            if (!Files.exists(affinityPath)) {
+                return ErrorCodes.ERROR_NOT_SUPPORTED;
+            }
+
+            // Convert long array to hex string
+            StringBuilder hexString = new StringBuilder();
+            boolean foundNonZero = false;
+
+            // Process from highest to lowest long to create proper hex representation
+            for (int i = maskLength - 1; i >= 0; i--) {
+                if (cpuMask[i] != 0 || foundNonZero) {
+                    if (foundNonZero && hexString.length() > 0) {
+                        hexString.append(String.format("%016x", cpuMask[i]));
+                    } else {
+                        hexString.append(String.format("%x", cpuMask[i]));
+                        foundNonZero = true;
+                    }
+                }
+            }
+
+            if (!foundNonZero) {
+                hexString.append("0");
+            }
+
+            // Write to smp_affinity file
+            Files.writeString(affinityPath, hexString.toString());
+            return ErrorCodes.SUCCESS;
+
+        } catch (IOException e) {
+            if (e.getMessage() != null && e.getMessage().contains("Permission denied")) {
+                return ErrorCodes.ERROR_PERMISSION_DENIED;
+            }
+            logger.debug("Failed to set IRQ {} affinity: {}", irqNumber, e.getMessage());
+            return ErrorCodes.ERROR_SYSTEM_CALL_FAILED;
+        } catch (Exception e) {
+            logger.debug("Failed to set IRQ {} affinity: {}", irqNumber, e.getMessage());
+            return ErrorCodes.ERROR_SYSTEM_CALL_FAILED;
+        }
+    }
+
+    @Override
+    public int setDefaultIrqAffinity(long[] cpuMask, int maskLength) {
+        if (cpuMask == null || maskLength <= 0) {
+            return ErrorCodes.ERROR_INVALID_PARAMETER;
+        }
+
+        try {
+            Path defaultAffinityPath = Paths.get("/proc/irq/default_smp_affinity");
+            if (!Files.exists(defaultAffinityPath)) {
+                return ErrorCodes.ERROR_NOT_SUPPORTED;
+            }
+
+            // Convert long array to hex string (same logic as setIrqAffinity)
+            StringBuilder hexString = new StringBuilder();
+            boolean foundNonZero = false;
+
+            for (int i = maskLength - 1; i >= 0; i--) {
+                if (cpuMask[i] != 0 || foundNonZero) {
+                    if (foundNonZero && hexString.length() > 0) {
+                        hexString.append(String.format("%016x", cpuMask[i]));
+                    } else {
+                        hexString.append(String.format("%x", cpuMask[i]));
+                        foundNonZero = true;
+                    }
+                }
+            }
+
+            if (!foundNonZero) {
+                hexString.append("0");
+            }
+
+            Files.writeString(defaultAffinityPath, hexString.toString());
+            return ErrorCodes.SUCCESS;
+
+        } catch (IOException e) {
+            if (e.getMessage() != null && e.getMessage().contains("Permission denied")) {
+                return ErrorCodes.ERROR_PERMISSION_DENIED;
+            }
+            logger.debug("Failed to set default IRQ affinity: {}", e.getMessage());
+            return ErrorCodes.ERROR_SYSTEM_CALL_FAILED;
+        } catch (Exception e) {
+            logger.debug("Failed to set default IRQ affinity: {}", e.getMessage());
+            return ErrorCodes.ERROR_SYSTEM_CALL_FAILED;
         }
     }
 }

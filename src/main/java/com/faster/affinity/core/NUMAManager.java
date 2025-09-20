@@ -564,12 +564,76 @@ public final class NUMAManager {
         return new NumaTopology(nodeCount, Collections.unmodifiableList(nodeIds));
     }
 
+    private OperationResult<BitSet> getNodeCpusDirect(int nodeId) {
+        try {
+            // For single-node systems, return all CPUs
+            if (!isAvailable() && nodeId == 0) {
+                BitSet allCpus = new BitSet();
+                int cpuCount = platformProvider.getCpuCount();
+                for (int i = 0; i < cpuCount; i++) {
+                    allCpus.set(i);
+                }
+                return OperationResult.success(allCpus);
+            }
+
+            if (!isAvailable()) {
+                return OperationResult.failure(new com.faster.affinity.exceptions.UnsupportedOperationException("getNodeCpusDirect",
+                    "NUMA operations not available"));
+            }
+
+            long[] maskArray = new long[16];
+            int result = platformProvider.getNumaNodeCpus(nodeId, maskArray, platformProvider.getCpuCount());
+
+            if (result != SUCCESS) {
+                throw createExceptionForErrorCode(result, "getNodeCpusDirect");
+            }
+
+            BitSet cpuMask = AffinityManager.longArrayToBitSet(maskArray, platformProvider.getCpuCount());
+            return OperationResult.success(cpuMask);
+
+        } catch (Exception e) {
+            return OperationResult.failure(new SystemCallException("getNodeCpusDirect", "numa_node_cpus", e));
+        }
+    }
+
+    private OperationResult<NumaNodeMemoryInfo> getNodeMemoryInfoDirect(int nodeId) {
+        try {
+            // For single-node systems, return unknown memory info
+            if (!isAvailable() && nodeId == 0) {
+                return OperationResult.success(new NumaNodeMemoryInfo(-1, -1));
+            }
+
+            if (!isAvailable()) {
+                return OperationResult.failure(new com.faster.affinity.exceptions.UnsupportedOperationException("getNodeMemoryInfoDirect",
+                    "NUMA operations not available"));
+            }
+
+            long[] memoryInfo = new long[2]; // [total, free]
+            int result = platformProvider.getNumaNodeMemoryInfo(nodeId, memoryInfo);
+
+            if (result != SUCCESS) {
+                throw createExceptionForErrorCode(result, "getNodeMemoryInfoDirect");
+            }
+
+            // Check if we got valid data
+            if (memoryInfo[0] < 0 && memoryInfo[1] >= 0) {
+                memoryInfo[0] = memoryInfo[1]; // Use free as total if total is invalid
+            }
+
+            NumaNodeMemoryInfo nodeMemInfo = new NumaNodeMemoryInfo(memoryInfo[0], memoryInfo[1]);
+            return OperationResult.success(nodeMemInfo);
+
+        } catch (Exception e) {
+            return OperationResult.failure(new SystemCallException("getNodeMemoryInfoDirect", "numa_node_memory", e));
+        }
+    }
+
     private NumaNodeInfo gatherNodeInfo(int nodeId) {
         BitSet cpuMask = new BitSet();
         NumaNodeMemoryInfo memoryInfo = new NumaNodeMemoryInfo(-1, -1);
 
         try {
-            OperationResult<BitSet> cpusResult = getNodeCpus(nodeId);
+            OperationResult<BitSet> cpusResult = getNodeCpusDirect(nodeId);
             if (cpusResult.isSuccess()) {
                 cpuMask = cpusResult.getValue();
             }
@@ -578,7 +642,7 @@ public final class NUMAManager {
         }
 
         try {
-            OperationResult<NumaNodeMemoryInfo> memoryResult = getNodeMemoryInfo(nodeId);
+            OperationResult<NumaNodeMemoryInfo> memoryResult = getNodeMemoryInfoDirect(nodeId);
             if (memoryResult.isSuccess()) {
                 memoryInfo = memoryResult.getValue();
             }

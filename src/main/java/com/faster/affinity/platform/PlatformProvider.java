@@ -48,6 +48,14 @@ public interface PlatformProvider {
     long getThreadContextSwitches(long tid);
     long getCoreCacheMisses(int coreId);
 
+    // IRQ (Interrupt Request) management
+    int getIrqCount();
+    int[] getAllIrqNumbers();
+    String getIrqDescription(int irqNumber);
+    int getIrqAffinity(int irqNumber, long[] cpuMask, int maskLength);
+    int setIrqAffinity(int irqNumber, long[] cpuMask, int maskLength);
+    int setDefaultIrqAffinity(long[] cpuMask, int maskLength);
+
     // Platform-specific capabilities
     boolean supportsFeature(String feature);
     void initialize() throws Exception;

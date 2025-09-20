@@ -34,6 +34,7 @@ public final class AffinityManager {
     private final TopologyDetector topologyDetector;
     private final PerformanceMonitor performanceMonitor;
     private final NUMAManager numaManager;
+    private final IRQManager irqManager;
     private final PlatformProvider platformProvider;
 
     // Caching and state management
@@ -59,6 +60,8 @@ public final class AffinityManager {
                 new PerformanceMonitor(platformProvider, config) : null;
         this.numaManager = config.isNumaOperationsEnabled() ?
                 new NUMAManager(platformProvider, config) : null;
+        this.irqManager = config.isIRQManagementEnabled() ?
+                new IRQManager(platformProvider, config) : null;
 
         logger.info("AffinityManager created with config: {}", config);
     }
@@ -140,6 +143,9 @@ public final class AffinityManager {
             }
             if (numaManager != null) {
                 numaManager.initialize();
+            }
+            if (irqManager != null) {
+                irqManager.initialize();
             }
 
             initialized.set(true);
@@ -304,6 +310,14 @@ public final class AffinityManager {
                     "NUMA operations are disabled in configuration");
         }
         return numaManager;
+    }
+
+    public IRQManager getIRQManager() throws com.faster.affinity.exceptions.UnsupportedOperationException {
+        if (irqManager == null) {
+            throw new com.faster.affinity.exceptions.UnsupportedOperationException("getIRQManager",
+                    "IRQ management is disabled in configuration");
+        }
+        return irqManager;
     }
 
     // Validation and error handling
@@ -533,6 +547,14 @@ public final class AffinityManager {
                 numaManager.shutdown();
             } catch (Exception e) {
                 logger.warn("Error shutting down NUMA manager: {}", e.getMessage());
+            }
+        }
+
+        if (irqManager != null) {
+            try {
+                irqManager.shutdown();
+            } catch (Exception e) {
+                logger.warn("Error shutting down IRQ manager: {}", e.getMessage());
             }
         }
 

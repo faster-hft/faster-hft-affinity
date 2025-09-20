@@ -3,8 +3,11 @@ package com.faster.affinity.performance;
 import com.sun.jna.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.lang.ref.Cleaner;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
 
 /**
  * Linux performance event counter wrapper.
@@ -12,6 +15,12 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class PerfEventCounter implements AutoCloseable {
     private static final Logger logger = LoggerFactory.getLogger(PerfEventCounter.class);
+
+    // Modern cleaner for resource management (Java 9+)
+    private static final Cleaner cleaner = Cleaner.create();
+
+    // Track all active counters for shutdown hook
+    private static final Set<CleanupAction> activeCounters = ConcurrentHashMap.newKeySet();
 
     // Native interface for system calls
     private interface NativeLib extends Library {
@@ -33,6 +42,9 @@ public class PerfEventCounter implements AutoCloseable {
     private final AtomicBoolean closed = new AtomicBoolean(false);
     private final long creationTime;
 
+    // Cleaner registration for automatic cleanup
+    private final Cleaner.Cleanable cleanable;
+
     /**
      * Creates a new performance counter from a file descriptor.
      *
@@ -46,6 +58,14 @@ public class PerfEventCounter implements AutoCloseable {
         this.fd = fd;
         this.description = description;
         this.creationTime = System.currentTimeMillis();
+
+        // Register cleaner for automatic resource cleanup
+        CleanupAction cleanupAction = new CleanupAction(fd, description, closed);
+        this.cleanable = cleaner.register(this, cleanupAction);
+        activeCounters.add(cleanupAction);
+
+        // Register shutdown hook on first instance creation
+        registerShutdownHookIfNeeded();
 
         // Enable the counter immediately
         enable();
@@ -154,24 +174,76 @@ public class PerfEventCounter implements AutoCloseable {
 
     @Override
     public void close() {
-        if (closed.compareAndSet(false, true) && fd >= 0) {
-            try {
-                disable(); // Disable before closing
-                NativeLib.INSTANCE.close(fd);
-                logger.debug("Closed {}", description);
-            } catch (Exception e) {
-                logger.warn("Failed to close {}: {}", description, e.getMessage());
+        if (closed.compareAndSet(false, true)) {
+            // Clean the cleaner registration
+            cleanable.clean();
+
+            if (fd >= 0) {
+                try {
+                    disable(); // Disable before closing
+                    NativeLib.INSTANCE.close(fd);
+                    logger.debug("Closed {}", description);
+                } catch (Exception e) {
+                    logger.warn("Failed to close {}: {}", description, e.getMessage());
+                }
             }
         }
     }
 
-    @Override
-    protected void finalize() throws Throwable {
-        if (!closed.get()) {
-            logger.warn("PerfEventCounter {} not properly closed, cleaning up in finalizer", description);
-            close();
+    /**
+     * Cleanup action for the Cleaner API.
+     * This runs when the PerfEventCounter is garbage collected.
+     */
+    private static class CleanupAction implements Runnable {
+        private final int fd;
+        private final String description;
+        private final AtomicBoolean closed;
+
+        CleanupAction(int fd, String description, AtomicBoolean closed) {
+            this.fd = fd;
+            this.description = description;
+            this.closed = closed;
         }
-        super.finalize();
+
+        @Override
+        public void run() {
+            if (closed.compareAndSet(false, true) && fd >= 0) {
+                try {
+                    // Disable before closing
+                    NativeLib.INSTANCE.ioctl(fd, PERF_EVENT_IOC_DISABLE, 0);
+                    NativeLib.INSTANCE.close(fd);
+                    logger.debug("Cleaner closed {}", description);
+                } catch (Exception e) {
+                    logger.warn("Cleaner failed to close {}: {}", description, e.getMessage());
+                }
+            }
+            // Remove from active counters
+            activeCounters.remove(this);
+        }
+    }
+
+    /**
+     * Registers a shutdown hook to ensure all file descriptors are closed on JVM shutdown.
+     * This provides an additional safety net beyond the cleaner.
+     */
+    private static volatile boolean shutdownHookRegistered = false;
+
+    private static void registerShutdownHookIfNeeded() {
+        if (!shutdownHookRegistered) {
+            synchronized (PerfEventCounter.class) {
+                if (!shutdownHookRegistered) {
+                    Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                        logger.debug("Shutdown hook cleaning up {} remaining PerfEventCounters", activeCounters.size());
+                        for (CleanupAction action : activeCounters) {
+                            action.run();
+                        }
+                        activeCounters.clear();
+                    }, "PerfEventCounter-Cleanup"));
+                    shutdownHookRegistered = true;
+                    logger.debug("Registered PerfEventCounter shutdown hook");
+                }
+            }
+        }
     }
 
     @Override

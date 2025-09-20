@@ -1,6 +1,7 @@
 package com.faster.affinity.factory;
 
 import com.faster.affinity.core.AffinityManager;
+import com.faster.affinity.core.IRQManager;
 import com.faster.affinity.core.NUMAManager;
 import com.faster.affinity.exceptions.OperationResult;
 import com.faster.affinity.performance.PerformanceMonitor;
@@ -44,6 +45,16 @@ public interface AffinityLibrary {
     OperationResult<Void> setThreadNumaAffinity(long threadId, int nodeId);
     OperationResult<Long> allocateNumaMemory(int nodeId, long size);
     OperationResult<Void> freeNumaMemory(long address);
+
+    // IRQ (Interrupt Request) management
+    OperationResult<java.util.List<IRQManager.IRQInfo>> getAllIRQs();
+    OperationResult<IRQManager.IRQInfo> getIRQInfo(int irqNumber);
+    OperationResult<java.util.BitSet> getIRQAffinity(int irqNumber);
+    OperationResult<Void> setIRQAffinity(int irqNumber, java.util.BitSet cpuMask);
+    OperationResult<Void> setDefaultIRQAffinity(java.util.BitSet housekeepingCores);
+    OperationResult<Void> isolateIRQsFromCores(java.util.BitSet tradingCores);
+    OperationResult<IRQManager.IRQIsolationStatus> getIRQIsolationStatus();
+    OperationResult<Void> restoreOriginalIRQAffinities();
 
     // Lifecycle
     void shutdown();

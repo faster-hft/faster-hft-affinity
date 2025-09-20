@@ -2,6 +2,7 @@ package com.faster.affinity.factory;
 
 import com.faster.affinity.config.AffinityConfig;
 import com.faster.affinity.core.AffinityManager;
+import com.faster.affinity.core.IRQManager;
 import com.faster.affinity.core.NUMAManager;
 import com.faster.affinity.exceptions.*;
 import com.faster.affinity.exceptions.OperationResult;
@@ -211,6 +212,88 @@ class AffinityLibraryImpl implements AffinityLibrary {
         checkInitialized();
         try {
             return affinityManager.getNUMAManager().freeMemory(address);
+        } catch (com.faster.affinity.exceptions.UnsupportedOperationException e) {
+            return OperationResult.failure(e);
+        }
+    }
+
+    // IRQ (Interrupt Request) management methods
+
+    @Override
+    public OperationResult<java.util.List<IRQManager.IRQInfo>> getAllIRQs() {
+        checkInitialized();
+        try {
+            return affinityManager.getIRQManager().getAllIRQs();
+        } catch (com.faster.affinity.exceptions.UnsupportedOperationException e) {
+            return OperationResult.failure(e);
+        }
+    }
+
+    @Override
+    public OperationResult<IRQManager.IRQInfo> getIRQInfo(int irqNumber) {
+        checkInitialized();
+        try {
+            return affinityManager.getIRQManager().getIRQInfo(irqNumber);
+        } catch (com.faster.affinity.exceptions.UnsupportedOperationException e) {
+            return OperationResult.failure(e);
+        }
+    }
+
+    @Override
+    public OperationResult<java.util.BitSet> getIRQAffinity(int irqNumber) {
+        checkInitialized();
+        try {
+            return affinityManager.getIRQManager().getIRQAffinity(irqNumber);
+        } catch (com.faster.affinity.exceptions.UnsupportedOperationException e) {
+            return OperationResult.failure(e);
+        }
+    }
+
+    @Override
+    public OperationResult<Void> setIRQAffinity(int irqNumber, java.util.BitSet cpuMask) {
+        checkInitialized();
+        try {
+            return affinityManager.getIRQManager().setIRQAffinity(irqNumber, cpuMask);
+        } catch (com.faster.affinity.exceptions.UnsupportedOperationException e) {
+            return OperationResult.failure(e);
+        }
+    }
+
+    @Override
+    public OperationResult<Void> setDefaultIRQAffinity(java.util.BitSet housekeepingCores) {
+        checkInitialized();
+        try {
+            return affinityManager.getIRQManager().setDefaultIRQAffinity(housekeepingCores);
+        } catch (com.faster.affinity.exceptions.UnsupportedOperationException e) {
+            return OperationResult.failure(e);
+        }
+    }
+
+    @Override
+    public OperationResult<Void> isolateIRQsFromCores(java.util.BitSet tradingCores) {
+        checkInitialized();
+        try {
+            return affinityManager.getIRQManager().isolateIRQsFromCores(tradingCores);
+        } catch (com.faster.affinity.exceptions.UnsupportedOperationException e) {
+            return OperationResult.failure(e);
+        }
+    }
+
+    @Override
+    public OperationResult<IRQManager.IRQIsolationStatus> getIRQIsolationStatus() {
+        checkInitialized();
+        try {
+            return affinityManager.getIRQManager().getIRQIsolationStatus();
+        } catch (com.faster.affinity.exceptions.UnsupportedOperationException e) {
+            return OperationResult.failure(e);
+        }
+    }
+
+    @Override
+    public OperationResult<Void> restoreOriginalIRQAffinities() {
+        checkInitialized();
+        try {
+            return affinityManager.getIRQManager().restoreOriginalIRQAffinities();
         } catch (com.faster.affinity.exceptions.UnsupportedOperationException e) {
             return OperationResult.failure(e);
         }

@@ -1235,4 +1235,54 @@ public class WindowsPlatformProvider implements PlatformProvider {
             }
         }
     }
+
+    // IRQ (Interrupt Request) management implementation
+    // Note: Windows has very limited IRQ affinity control compared to Linux
+
+    @Override
+    public int getIrqCount() {
+        // Windows doesn't expose a simple way to enumerate all IRQs
+        // Return 0 to indicate this feature is not available
+        logger.debug("IRQ enumeration not supported on Windows");
+        return 0;
+    }
+
+    @Override
+    public int[] getAllIrqNumbers() {
+        // Windows doesn't provide a straightforward way to list all IRQ numbers
+        // like Linux's /proc/interrupts
+        logger.debug("IRQ enumeration not supported on Windows");
+        return new int[0];
+    }
+
+    @Override
+    public String getIrqDescription(int irqNumber) {
+        // Windows doesn't provide easy access to IRQ descriptions
+        return "Windows IRQ " + irqNumber + " (limited info)";
+    }
+
+    @Override
+    public int getIrqAffinity(int irqNumber, long[] cpuMask, int maskLength) {
+        // Windows doesn't provide a direct way to get IRQ affinity
+        // Most IRQ affinity is handled automatically by the system
+        logger.debug("Getting IRQ affinity not supported on Windows");
+        return ErrorCodes.ERROR_NOT_SUPPORTED;
+    }
+
+    @Override
+    public int setIrqAffinity(int irqNumber, long[] cpuMask, int maskLength) {
+        // Windows has very limited IRQ affinity control
+        // Most interrupt handling is managed by the OS and device drivers
+        logger.debug("Setting IRQ affinity not supported on Windows");
+        return ErrorCodes.ERROR_NOT_SUPPORTED;
+    }
+
+    @Override
+    public int setDefaultIrqAffinity(long[] cpuMask, int maskLength) {
+        // Windows doesn't have a direct equivalent to Linux's /proc/irq/default_smp_affinity
+        // Some level of interrupt steering can be achieved through RSS (Receive Side Scaling)
+        // for network adapters, but this is device-specific and not a general IRQ mechanism
+        logger.debug("Setting default IRQ affinity not supported on Windows");
+        return ErrorCodes.ERROR_NOT_SUPPORTED;
+    }
 }
