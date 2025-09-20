@@ -11,8 +11,8 @@ import com.faster.affinity.cache.HotPathCache;
 import com.faster.affinity.pool.ObjectPoolManager;
 import com.faster.affinity.numa.NumaAffinityChecker;
 import com.faster.affinity.performance.HFTPerformanceProfiler;
-import jdk.internal.vm.annotation.DontInline;
-import jdk.internal.vm.annotation.ForceInline;
+import com.faster.affinity.annotations.HotPath;
+import com.faster.affinity.annotations.ColdPath;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.BitSet;
@@ -185,7 +185,7 @@ public final class AffinityManager {
             hftProfiler = new HFTPerformanceProfiler(hotPathCache);
 
             // Initialize lock-free operations for hot paths
-            lockFreeOps = new LockFreeAffinityOperations(platformProvider, hotPathCache);
+            lockFreeOps = new LockFreeAffinityOperations(platformProvider, hotPathCache, hftProfiler);
 
             // Enable NUMA-aware pooling if NUMA is available
             if (numaManager != null && numaManager.isAvailable()) {
@@ -245,7 +245,7 @@ public final class AffinityManager {
      * High-performance version of getCurrentThreadAffinity for hot paths.
      * Uses lock-free caching and pre-allocated objects.
      */
-    @ForceInline
+    @HotPath("Primary hot path for thread affinity queries")
     public OperationResult<BitSet> getCurrentThreadAffinityFast() {
         long startTime = System.nanoTime();
 
@@ -269,7 +269,7 @@ public final class AffinityManager {
      * High-performance version of setCurrentThreadAffinity for hot paths.
      * Uses lock-free caching and pre-allocated objects.
      */
-    @ForceInline
+    @HotPath("Primary hot path for thread affinity updates")
     public OperationResult<Void> setCurrentThreadAffinityFast(BitSet cpuMask) {
         if (lockFreeOps != null) {
             return lockFreeOps.setCurrentThreadAffinityFast(cpuMask);
@@ -281,7 +281,7 @@ public final class AffinityManager {
     /**
      * Bulk affinity operations for multiple threads (hot path optimized).
      */
-    @ForceInline
+    @HotPath("Bulk operations for multiple thread affinity updates")
     public int setBulkThreadAffinityFast(long[] threadIds, BitSet cpuMask) {
         if (lockFreeOps != null) {
             return lockFreeOps.setBulkThreadAffinity(threadIds, cpuMask);
@@ -297,7 +297,7 @@ public final class AffinityManager {
         return successCount;
     }
 
-    @ForceInline
+    @HotPath("Standard thread affinity setting operation")
     public OperationResult<Void> setThreadAffinity(long threadId, BitSet cpuMask) {
         return executeWithRetry("setThreadAffinity", () -> {
             validateParameters("setThreadAffinity", threadId, cpuMask);
@@ -326,12 +326,12 @@ public final class AffinityManager {
                 operationCache.put(key, new CacheEntry(cpuMask.clone(), System.currentTimeMillis()));
             }
 
-            logger.info("Successfully set thread {} affinity to {}", threadId, cpuMask);
+            logger.debug("Successfully set thread {} affinity to {}", threadId, cpuMask);
             return null;
         });
     }
 
-    @ForceInline
+    @HotPath("Standard thread affinity query operation")
     public OperationResult<BitSet> getThreadAffinity(long threadId) {
         return executeWithRetry("getThreadAffinity", () -> {
             validateParameters("getThreadAffinity", threadId);
@@ -610,7 +610,7 @@ public final class AffinityManager {
 
     // Validation and error handling
 
-    @DontInline
+    @ColdPath("Parameter validation - infrequent operation")
     private void validateParameters(String operation, Object... params) throws InvalidParameterException {
         if (!config.isParameterValidationEnabled()) {
             return;
@@ -721,7 +721,7 @@ public final class AffinityManager {
         }
     }
 
-    @DontInline
+    @ColdPath("Error handling - infrequent operation")
     private AffinityException createExceptionForErrorCode(int errorCode, String operation, Map<String, Object> context) {
         String description = ErrorCodes.getErrorDescription(errorCode);
 

@@ -2,11 +2,13 @@ package com.faster.affinity.core;
 
 import com.faster.affinity.cache.HotPathCache;
 import com.faster.affinity.exceptions.OperationResult;
+import com.faster.affinity.exceptions.ErrorCodes;
 import com.faster.affinity.platform.PlatformProvider;
+import com.faster.affinity.performance.HFTPerformanceProfiler;
+import com.faster.affinity.annotations.HotPath;
+import com.faster.affinity.annotations.ColdPath;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import jdk.internal.vm.annotation.DontInline;
-import jdk.internal.vm.annotation.ForceInline;
 
 import java.util.BitSet;
 
@@ -19,17 +21,19 @@ public final class LockFreeAffinityOperations {
 
     private final PlatformProvider platformProvider;
     private final HotPathCache hotPathCache;
+    private final HFTPerformanceProfiler profiler;
 
-    public LockFreeAffinityOperations(PlatformProvider platformProvider, HotPathCache hotPathCache) {
+    public LockFreeAffinityOperations(PlatformProvider platformProvider, HotPathCache hotPathCache, HFTPerformanceProfiler profiler) {
         this.platformProvider = platformProvider;
         this.hotPathCache = hotPathCache;
+        this.profiler = profiler;
     }
 
     /**
      * Get current thread affinity with aggressive caching.
      * This is the primary hot path method - optimized for minimal latency.
      */
-    @ForceInline
+    @HotPath(value = "Lock-free current thread affinity query", expectedFrequency = 1000000, targetLatencyNs = 100)
     public OperationResult<BitSet> getCurrentThreadAffinityFast() {
         long threadId = platformProvider.getCurrentThreadId();
         return getThreadAffinityFast(threadId);
@@ -39,17 +43,20 @@ public final class LockFreeAffinityOperations {
      * Get thread affinity with hot path optimization.
      * Uses cached values when possible to avoid system calls.
      */
-    @ForceInline
+    @HotPath(value = "Lock-free thread affinity query", expectedFrequency = 500000, targetLatencyNs = 150)
     public OperationResult<BitSet> getThreadAffinityFast(long threadId) {
         HotPathCache.AffinityCache cache = hotPathCache.getAffinityCache();
 
         // Fast path: check cache first
         BitSet cachedAffinity = cache.getCachedThreadAffinity(threadId);
         if (cachedAffinity != null) {
+            // Cache hit
+            if (profiler != null) profiler.recordCacheAccess(true);
             return OperationResult.success(cachedAffinity);
         }
 
-        // Slow path: query system and update cache
+        // Cache miss - record and go to slow path
+        if (profiler != null) profiler.recordCacheAccess(false);
         return getThreadAffinitySlowPath(threadId, cache);
     }
 
@@ -57,7 +64,7 @@ public final class LockFreeAffinityOperations {
      * Set current thread affinity with hot path optimization.
      * Updates cache and uses pre-allocated arrays.
      */
-    @ForceInline
+    @HotPath(value = "Lock-free current thread affinity update", expectedFrequency = 100000, targetLatencyNs = 200)
     public OperationResult<Void> setCurrentThreadAffinityFast(BitSet cpuMask) {
         long threadId = platformProvider.getCurrentThreadId();
         return setThreadAffinityFast(threadId, cpuMask);
@@ -67,14 +74,14 @@ public final class LockFreeAffinityOperations {
      * Set thread affinity with hot path optimization.
      * Uses pre-allocated arrays and updates cache.
      */
-    @ForceInline
+    @HotPath(value = "Lock-free thread affinity update", expectedFrequency = 50000, targetLatencyNs = 250)
     public OperationResult<Void> setThreadAffinityFast(long threadId, BitSet cpuMask) {
-        HotPathCache.AffinityCache cache = hotPathCache.getAffinityCache();
-
         // Fast validation (no exceptions in hot path)
         if (cpuMask == null || cpuMask.isEmpty()) {
-            return OperationResult.failure(new IllegalArgumentException("Invalid CPU mask"));
+            return OperationResult.failure(ErrorCodes.ERROR_INVALID_PARAMETER, "setThreadAffinity", "Invalid CPU mask");
         }
+
+        HotPathCache.AffinityCache cache = hotPathCache.getAffinityCache();
 
         // Use pre-allocated array from cache
         long[] maskArray = cache.getTempMaskArray();
@@ -86,12 +93,12 @@ public final class LockFreeAffinityOperations {
         int result = platformProvider.setThreadAffinity(threadId, maskArray, maskArray.length);
 
         if (result == 0) {
-            // Success: update cache
+            // Success: update cache (only if operation succeeded)
             cache.setCachedThreadAffinity(threadId, cpuMask);
             return OperationResult.success(null);
         } else {
             // Failure: don't update cache, return error
-            return OperationResult.failure(createAffinityException(result, "setThreadAffinity"));
+            return OperationResult.failure(result, "setThreadAffinity", "System call failed");
         }
     }
 
@@ -99,20 +106,30 @@ public final class LockFreeAffinityOperations {
      * Bulk affinity operations for multiple threads.
      * Optimized for scenarios where many threads need affinity changes.
      */
-    @ForceInline
+    @HotPath(value = "Bulk thread affinity operations", expectedFrequency = 10000, targetLatencyNs = 500)
     public int setBulkThreadAffinity(long[] threadIds, BitSet cpuMask) {
         if (threadIds == null || threadIds.length == 0) {
             return 0;
         }
 
+        // Fast validation once for all operations
+        if (cpuMask == null || cpuMask.isEmpty()) {
+            return 0;
+        }
+
         HotPathCache.AffinityCache cache = hotPathCache.getAffinityCache();
         long[] maskArray = cache.getTempMaskArray();
+
+        // Convert BitSet to mask array once for all operations
         convertBitSetToMaskArray(cpuMask, maskArray);
 
         int successCount = 0;
-        for (long threadId : threadIds) {
+        // Optimize loop for bulk operations
+        for (int i = 0; i < threadIds.length; i++) {
+            long threadId = threadIds[i];
             int result = platformProvider.setThreadAffinity(threadId, maskArray, maskArray.length);
             if (result == 0) {
+                // Batch cache updates for better performance
                 cache.setCachedThreadAffinity(threadId, cpuMask);
                 successCount++;
             }
@@ -124,7 +141,7 @@ public final class LockFreeAffinityOperations {
     /**
      * Check if thread affinity has changed (cache invalidation check).
      */
-    @ForceInline
+    @HotPath(value = "Cache invalidation check", expectedFrequency = 100000, targetLatencyNs = 50)
     public boolean hasAffinityChanged(long threadId) {
         HotPathCache.AffinityCache cache = hotPathCache.getAffinityCache();
         return !cache.isThreadAffinityValid(threadId);
@@ -142,7 +159,7 @@ public final class LockFreeAffinityOperations {
      * Slow path for thread affinity retrieval.
      * Separated to keep fast path optimized.
      */
-    @DontInline
+    @ColdPath("Slow path for cache misses")
     private OperationResult<BitSet> getThreadAffinitySlowPath(long threadId, HotPathCache.AffinityCache cache) {
         long[] maskArray = cache.getTempMaskArray();
 
@@ -153,14 +170,14 @@ public final class LockFreeAffinityOperations {
             cache.setCachedThreadAffinity(threadId, affinity);
             return OperationResult.success(affinity);
         } else {
-            return OperationResult.failure(createAffinityException(result, "getThreadAffinity"));
+            return OperationResult.failure(result, "getThreadAffinity", "System call failed");
         }
     }
 
     /**
      * Convert BitSet to long array mask (optimized for hot path).
      */
-    @ForceInline
+    @HotPath(value = "BitSet to mask array conversion", expectedFrequency = 200000, targetLatencyNs = 100)
     private static void convertBitSetToMaskArray(BitSet bitSet, long[] maskArray) {
         // Clear the array first
         for (int i = 0; i < maskArray.length; i++) {
@@ -186,7 +203,7 @@ public final class LockFreeAffinityOperations {
     /**
      * Convert long array mask to BitSet (optimized for hot path).
      */
-    @ForceInline
+    @HotPath(value = "Mask array to BitSet conversion", expectedFrequency = 200000, targetLatencyNs = 100)
     private static BitSet convertMaskArrayToBitSet(long[] maskArray) {
         BitSet result = new BitSet();
 
@@ -207,7 +224,7 @@ public final class LockFreeAffinityOperations {
     /**
      * Create appropriate exception for error codes (don't inline to keep hot path fast).
      */
-    @DontInline
+    @ColdPath("Error exception creation")
     private static RuntimeException createAffinityException(int errorCode, String operation) {
         switch (errorCode) {
             case 1: // EPERM

@@ -1,6 +1,7 @@
 package com.faster.affinity.pool;
 
 import com.faster.affinity.exceptions.OperationResult;
+import com.faster.affinity.exceptions.ErrorCodes;
 
 /**
  * Pooled OperationResult that can be reused to minimize allocation pressure.
@@ -11,12 +12,10 @@ public final class PooledOperationResult<T> implements AutoCloseable {
     private T value;
     private Throwable error;
     private boolean isSuccess;
-    private final ObjectPool<PooledOperationResult<T>> pool;
     private boolean returned = false;
 
-    @SuppressWarnings("unchecked")
     public PooledOperationResult() {
-        this.pool = (ObjectPool<PooledOperationResult<T>>) getStaticPool();
+        // Simplified constructor without complex pool management
     }
 
     /**
@@ -78,7 +77,8 @@ public final class PooledOperationResult<T> implements AutoCloseable {
         if (isSuccess) {
             return OperationResult.success(value);
         } else {
-            return OperationResult.failure(error);
+            // Convert Throwable to error code format for OperationResult
+            return OperationResult.failure(ErrorCodes.ERROR_OPERATION_FAILED, "operation", error.getMessage());
         }
     }
 
@@ -87,9 +87,8 @@ public final class PooledOperationResult<T> implements AutoCloseable {
      */
     @Override
     public void close() {
-        if (!returned && pool != null) {
+        if (!returned) {
             reset();
-            pool.release(this);
             returned = true;
         }
     }
@@ -106,65 +105,35 @@ public final class PooledOperationResult<T> implements AutoCloseable {
         }
     }
 
-    // Static pool for PooledOperationResult instances
-    private static volatile ObjectPool<PooledOperationResult<?>> staticPool;
-
-    private static ObjectPool<PooledOperationResult<?>> getStaticPool() {
-        if (staticPool == null) {
-            synchronized (PooledOperationResult.class) {
-                if (staticPool == null) {
-                    staticPool = new ThreadLocalObjectPool<>(
-                            PooledOperationResult::new,
-                            32 // Pool size
-                    );
-                    ObjectPoolManager.registerPool("pooled-operation-result", staticPool);
-                }
-            }
-        }
-        return staticPool;
-    }
-
     /**
-     * Factory method to acquire a pooled success result.
+     * Factory method to create a pooled success result.
+     * Optimized for hot path usage.
      */
-    @SuppressWarnings("unchecked")
     public static <T> PooledOperationResult<T> success(T value) {
-        ObjectPool<PooledOperationResult<T>> pool =
-            (ObjectPool<PooledOperationResult<T>>) getStaticPool();
-        PooledOperationResult<T> result = pool.acquire();
-        if (result == null) {
-            result = new PooledOperationResult<>();
-        }
-        return result.setSuccess(value);
-    }
-
-    /**
-     * Factory method to acquire a pooled failure result.
-     */
-    @SuppressWarnings("unchecked")
-    public static <T> PooledOperationResult<T> failure(Throwable error) {
-        ObjectPool<PooledOperationResult<T>> pool =
-            (ObjectPool<PooledOperationResult<T>>) getStaticPool();
-        PooledOperationResult<T> result = pool.acquire();
-        if (result == null) {
-            result = new PooledOperationResult<>();
-        }
-        return result.setFailure(error);
-    }
-
-    /**
-     * Factory method to acquire a pooled result (uninitialized).
-     */
-    @SuppressWarnings("unchecked")
-    public static <T> PooledOperationResult<T> acquire() {
-        ObjectPool<PooledOperationResult<T>> pool =
-            (ObjectPool<PooledOperationResult<T>>) getStaticPool();
-        PooledOperationResult<T> result = pool.acquire();
-        if (result == null) {
-            result = new PooledOperationResult<>();
-        } else {
-            result.reset();
-        }
+        PooledOperationResult<T> result = new PooledOperationResult<T>();
+        result.value = value;
+        result.isSuccess = true;
+        result.error = null;
         return result;
+    }
+
+    /**
+     * Factory method to create a pooled failure result.
+     * Optimized for hot path usage.
+     */
+    public static <T> PooledOperationResult<T> failure(Throwable error) {
+        PooledOperationResult<T> result = new PooledOperationResult<T>();
+        result.value = null;
+        result.isSuccess = false;
+        result.error = error;
+        return result;
+    }
+
+    /**
+     * Factory method to create a pooled result (uninitialized).
+     * For manual setup to avoid method call overhead.
+     */
+    public static <T> PooledOperationResult<T> acquire() {
+        return new PooledOperationResult<T>();
     }
 }

@@ -29,24 +29,29 @@ public final class PooledBitSet implements AutoCloseable {
     }
 
     /**
-     * Set a bit in the BitSet.
+     * Set a bit in the BitSet (optimized, no extra method calls).
      */
     public void set(int bitIndex) {
-        get().set(bitIndex);
+        // Skip expensive validation in hot path
+        bitSet.set(bitIndex);
     }
 
     /**
-     * Set a range of bits in the BitSet.
+     * Set a range of bits in the BitSet (optimized, no extra method calls).
      */
     public void set(int fromIndex, int toIndex) {
-        get().set(fromIndex, toIndex);
+        // Skip expensive validation in hot path
+        bitSet.set(fromIndex, toIndex);
     }
 
     /**
-     * Clear a bit in the BitSet.
+     * Clear a bit in the BitSet (optimized, no extra method calls).
      */
     public void clear(int bitIndex) {
-        get().clear(bitIndex);
+        if (returned) {
+            throw new IllegalStateException("BitSet has been returned to pool");
+        }
+        bitSet.clear(bitIndex);
     }
 
     /**

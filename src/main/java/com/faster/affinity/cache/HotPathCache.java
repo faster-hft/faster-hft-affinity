@@ -65,6 +65,9 @@ public final class HotPathCache {
             this.lastThreadAffinity = new BitSet(4096);
             this.lastProcessAffinity = new BitSet(4096);
 
+            // Initialize cache version to current global version
+            this.cacheVersion = getCacheVersion();
+
             // Get pooled objects for this thread
             this.tempMaskArray = ObjectPoolManager.getLongArrayPool().acquire();
             this.tempIntArray = ObjectPoolManager.getIntArrayPool().acquire();
@@ -81,7 +84,10 @@ public final class HotPathCache {
             if (threadId != lastThreadId) {
                 return false;
             }
-            // Additional staleness check could go here
+            // Check for cache staleness (1 millisecond expiration for HFT)
+            if (lastValidationTime > 0 && (System.nanoTime() - lastValidationTime) > 1_000_000) {
+                return false;
+            }
             return true;
         }
 

@@ -12,7 +12,7 @@ public class ThreadLocalObjectPool<T> implements ObjectPool<T> {
 
     private final Supplier<T> objectFactory;
     private final int maxPoolSize;
-    private final ThreadLocal<LocalPool> localPool;
+    private final ThreadLocal<LocalPool<T>> localPool;
 
     // Global statistics (thread-safe)
     private final AtomicInteger totalAcquisitions = new AtomicInteger();
@@ -22,13 +22,13 @@ public class ThreadLocalObjectPool<T> implements ObjectPool<T> {
     public ThreadLocalObjectPool(Supplier<T> objectFactory, int maxPoolSize) {
         this.objectFactory = objectFactory;
         this.maxPoolSize = maxPoolSize;
-        this.localPool = ThreadLocal.withInitial(() -> new LocalPool(maxPoolSize));
+        this.localPool = ThreadLocal.withInitial(() -> new LocalPool<>(maxPoolSize));
     }
 
     @Override
     public T acquire() {
         totalAcquisitions.incrementAndGet();
-        LocalPool pool = localPool.get();
+        LocalPool<T> pool = localPool.get();
         T obj = pool.acquire();
         if (obj == null) {
             // Pool miss - create new object
@@ -42,7 +42,7 @@ public class ThreadLocalObjectPool<T> implements ObjectPool<T> {
     public void release(T obj) {
         if (obj != null) {
             totalReleases.incrementAndGet();
-            LocalPool pool = localPool.get();
+            LocalPool<T> pool = localPool.get();
             pool.release(obj);
         }
     }
@@ -76,8 +76,8 @@ public class ThreadLocalObjectPool<T> implements ObjectPool<T> {
     /**
      * Thread-local pool implementation using ArrayDeque for optimal performance.
      */
-    private static class LocalPool {
-        private final ArrayDeque<Object> objects;
+    private static class LocalPool<T> {
+        private final ArrayDeque<T> objects;
         private final int maxSize;
 
         LocalPool(int maxSize) {
@@ -85,12 +85,11 @@ public class ThreadLocalObjectPool<T> implements ObjectPool<T> {
             this.objects = new ArrayDeque<>(Math.min(maxSize, 16));
         }
 
-        @SuppressWarnings("unchecked")
         T acquire() {
-            return (T) objects.pollFirst();
+            return objects.pollFirst();
         }
 
-        void release(Object obj) {
+        void release(T obj) {
             if (objects.size() < maxSize) {
                 objects.offerFirst(obj);
             }
