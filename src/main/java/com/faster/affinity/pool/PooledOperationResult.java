@@ -110,7 +110,7 @@ public final class PooledOperationResult<T> implements AutoCloseable {
      * Optimized for hot path usage.
      */
     public static <T> PooledOperationResult<T> success(T value) {
-        PooledOperationResult<T> result = new PooledOperationResult<T>();
+        PooledOperationResult<T> result = new PooledOperationResult<>();
         result.value = value;
         result.isSuccess = true;
         result.error = null;
@@ -122,7 +122,7 @@ public final class PooledOperationResult<T> implements AutoCloseable {
      * Optimized for hot path usage.
      */
     public static <T> PooledOperationResult<T> failure(Throwable error) {
-        PooledOperationResult<T> result = new PooledOperationResult<T>();
+        PooledOperationResult<T> result = new PooledOperationResult<>();
         result.value = null;
         result.isSuccess = false;
         result.error = error;
@@ -134,6 +134,6 @@ public final class PooledOperationResult<T> implements AutoCloseable {
      * For manual setup to avoid method call overhead.
      */
     public static <T> PooledOperationResult<T> acquire() {
-        return new PooledOperationResult<T>();
+        return new PooledOperationResult<>();
     }
 }

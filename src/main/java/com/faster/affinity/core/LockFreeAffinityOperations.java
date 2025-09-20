@@ -125,8 +125,7 @@ public final class LockFreeAffinityOperations {
 
         int successCount = 0;
         // Optimize loop for bulk operations
-        for (int i = 0; i < threadIds.length; i++) {
-            long threadId = threadIds[i];
+        for (long threadId : threadIds) {
             int result = platformProvider.setThreadAffinity(threadId, maskArray, maskArray.length);
             if (result == 0) {
                 // Batch cache updates for better performance
@@ -180,9 +179,7 @@ public final class LockFreeAffinityOperations {
     @HotPath(value = "BitSet to mask array conversion", expectedFrequency = 200000, targetLatencyNs = 100)
     private static void convertBitSetToMaskArray(BitSet bitSet, long[] maskArray) {
         // Clear the array first
-        for (int i = 0; i < maskArray.length; i++) {
-            maskArray[i] = 0;
-        }
+        java.util.Arrays.fill(maskArray, 0);
 
         // Set bits efficiently
         for (int i = bitSet.nextSetBit(0); i >= 0; i = bitSet.nextSetBit(i + 1)) {

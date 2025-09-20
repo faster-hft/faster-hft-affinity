@@ -153,9 +153,7 @@ public final class HotPathCache {
          */
         public long[] getTempMaskArray() {
             // Clear the array before use
-            for (int i = 0; i < tempMaskArray.length; i++) {
-                tempMaskArray[i] = 0;
-            }
+            java.util.Arrays.fill(tempMaskArray, 0);
             return tempMaskArray;
         }
 
@@ -164,9 +162,7 @@ public final class HotPathCache {
          */
         public int[] getTempIntArray() {
             // Clear the array before use
-            for (int i = 0; i < tempIntArray.length; i++) {
-                tempIntArray[i] = 0;
-            }
+            java.util.Arrays.fill(tempIntArray, 0);
             return tempIntArray;
         }
 

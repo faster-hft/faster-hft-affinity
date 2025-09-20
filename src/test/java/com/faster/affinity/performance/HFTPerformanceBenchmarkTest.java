@@ -2,13 +2,11 @@ package com.faster.affinity.performance;
 
 import com.faster.affinity.config.AffinityConfig;
 import com.faster.affinity.core.AffinityManager;
-import com.faster.affinity.exceptions.OperationResult;
 import org.junit.jupiter.api.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.BitSet;
 import java.util.concurrent.*;
-import java.util.stream.IntStream;
 
 /**
  * Comprehensive benchmark tests for HFT performance optimizations.
@@ -26,7 +24,7 @@ public class HFTPerformanceBenchmarkTest {
     private BitSet testCpuMask;
 
     @BeforeAll
-    void setUp() throws Exception {
+    void setUp() {
         // Create high-performance configuration
         AffinityConfig config = AffinityConfig.builder()
                 .enablePerformanceCounters(true)
@@ -53,7 +51,7 @@ public class HFTPerformanceBenchmarkTest {
     @Test
     @Order(1)
     @DisplayName("Benchmark: Hot Path vs Standard Operations")
-    void benchmarkHotPathVsStandard() throws Exception {
+    void benchmarkHotPathVsStandard() {
         System.out.println("\n📊 Benchmarking Hot Path vs Standard Operations");
 
         // Warmup
@@ -93,7 +91,7 @@ public class HFTPerformanceBenchmarkTest {
     @Test
     @Order(2)
     @DisplayName("Benchmark: Object Pooling Efficiency")
-    void benchmarkObjectPooling() throws Exception {
+    void benchmarkObjectPooling() {
         System.out.println("\n📊 Benchmarking Object Pooling Efficiency");
 
         // Test with pooled objects
@@ -115,13 +113,12 @@ public class HFTPerformanceBenchmarkTest {
     @Test
     @Order(3)
     @DisplayName("Benchmark: Cache Hit Rate Effectiveness")
-    void benchmarkCacheHitRate() throws Exception {
+    void benchmarkCacheHitRate() {
         System.out.println("\n📊 Benchmarking Cache Hit Rate Effectiveness");
 
         affinityManager.resetHFTPerformanceStats();
 
         // Perform repeated operations on same thread to maximize cache hits
-        long threadId = Thread.currentThread().getId();
 
         for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
             // Alternate between get and set to test cache effectiveness
@@ -149,7 +146,7 @@ public class HFTPerformanceBenchmarkTest {
     @Test
     @Order(4)
     @DisplayName("Benchmark: Concurrent Performance")
-    void benchmarkConcurrentPerformance() throws Exception {
+    void benchmarkConcurrentPerformance() throws InterruptedException {
         System.out.println("\n📊 Benchmarking Concurrent Performance");
 
         affinityManager.resetHFTPerformanceStats();
@@ -211,7 +208,7 @@ public class HFTPerformanceBenchmarkTest {
     @Test
     @Order(5)
     @DisplayName("Benchmark: Bulk Operations")
-    void benchmarkBulkOperations() throws Exception {
+    void benchmarkBulkOperations() {
         System.out.println("\n📊 Benchmarking Bulk Operations");
 
         // Create array of thread IDs
@@ -312,7 +309,10 @@ public class HFTPerformanceBenchmarkTest {
             BitSet bitSet = new BitSet();
             bitSet.set(0);
             bitSet.set(1);
-            // Object will be garbage collected
+            // Ensure the BitSet is actually used to prevent dead code elimination
+            if (bitSet.cardinality() != 2) {
+                throw new IllegalStateException("Unexpected cardinality");
+            }
         }
 
         return (System.nanoTime() - startTime) / BENCHMARK_ITERATIONS;
