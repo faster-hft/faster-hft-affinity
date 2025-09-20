@@ -1,0 +1,335 @@
+package com.faster.affinity.exceptions;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import java.util.Map;
+import java.util.HashMap;
+
+/**
+ * Comprehensive error handling framework for the affinity library.
+ * Provides specific exception types, error codes, and context information.
+ */
+public final class AffinityExceptions {
+
+    // Error code constants
+    public static final int SUCCESS = 0;
+    public static final int ERROR_INVALID_PARAMETER = -1;
+    public static final int ERROR_PERMISSION_DENIED = -2;
+    public static final int ERROR_NOT_SUPPORTED = -3;
+    public static final int ERROR_INSUFFICIENT_MEMORY = -4;
+    public static final int ERROR_SYSTEM_CALL_FAILED = -5;
+    public static final int ERROR_TIMEOUT = -6;
+    public static final int ERROR_RESOURCE_BUSY = -7;
+    public static final int ERROR_HARDWARE_NOT_AVAILABLE = -8;
+    public static final int ERROR_CONFIGURATION_INVALID = -9;
+    public static final int ERROR_NUMA_NOT_AVAILABLE = -10;
+    public static final int ERROR_CACHE_EXPIRED = -11;
+    public static final int ERROR_THREAD_NOT_FOUND = -12;
+    public static final int ERROR_PROCESS_NOT_FOUND = -13;
+    public static final int ERROR_KERNEL_VERSION_UNSUPPORTED = -14;
+    public static final int ERROR_PERFORMANCE_COUNTERS_UNAVAILABLE = -15;
+
+    private static final Map<Integer, String> ERROR_DESCRIPTIONS = new HashMap<>();
+
+    static {
+        ERROR_DESCRIPTIONS.put(SUCCESS, "Operation completed successfully");
+        ERROR_DESCRIPTIONS.put(ERROR_INVALID_PARAMETER, "Invalid parameter provided");
+        ERROR_DESCRIPTIONS.put(ERROR_PERMISSION_DENIED, "Permission denied - may require root/administrator privileges");
+        ERROR_DESCRIPTIONS.put(ERROR_NOT_SUPPORTED, "Operation not supported on this platform");
+        ERROR_DESCRIPTIONS.put(ERROR_INSUFFICIENT_MEMORY, "Insufficient memory available");
+        ERROR_DESCRIPTIONS.put(ERROR_SYSTEM_CALL_FAILED, "System call failed");
+        ERROR_DESCRIPTIONS.put(ERROR_TIMEOUT, "Operation timed out");
+        ERROR_DESCRIPTIONS.put(ERROR_RESOURCE_BUSY, "Resource is currently busy");
+        ERROR_DESCRIPTIONS.put(ERROR_HARDWARE_NOT_AVAILABLE, "Required hardware feature not available");
+        ERROR_DESCRIPTIONS.put(ERROR_CONFIGURATION_INVALID, "System configuration is invalid");
+        ERROR_DESCRIPTIONS.put(ERROR_NUMA_NOT_AVAILABLE, "NUMA functionality not available");
+        ERROR_DESCRIPTIONS.put(ERROR_CACHE_EXPIRED, "Cached data has expired");
+        ERROR_DESCRIPTIONS.put(ERROR_THREAD_NOT_FOUND, "Specified thread not found");
+        ERROR_DESCRIPTIONS.put(ERROR_PROCESS_NOT_FOUND, "Specified process not found");
+        ERROR_DESCRIPTIONS.put(ERROR_KERNEL_VERSION_UNSUPPORTED, "Kernel version not supported");
+        ERROR_DESCRIPTIONS.put(ERROR_PERFORMANCE_COUNTERS_UNAVAILABLE, "Performance counters not available");
+    }
+
+    public static String getErrorDescription(int errorCode) {
+        return ERROR_DESCRIPTIONS.getOrDefault(errorCode, "Unknown error code: " + errorCode);
+    }
+
+    /**
+     * Base exception for all affinity library errors
+     */
+    public static abstract class AffinityException extends Exception {
+        private final int errorCode;
+        private final String operation;
+        private final Map<String, Object> context;
+        private final long timestamp;
+
+        protected AffinityException(int errorCode, String operation, String message, Throwable cause) {
+            super(message, cause);
+            this.errorCode = errorCode;
+            this.operation = operation;
+            this.context = new HashMap<>();
+            this.timestamp = System.currentTimeMillis();
+        }
+
+        protected AffinityException(int errorCode, String operation, String message) {
+            this(errorCode, operation, message, null);
+        }
+
+        public int getErrorCode() { return errorCode; }
+        public String getOperation() { return operation; }
+        public Map<String, Object> getContext() { return new HashMap<>(context); }
+        public long getTimestamp() { return timestamp; }
+
+        public AffinityException addContext(String key, Object value) {
+            context.put(key, value);
+            return this;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("%s[code=%d, op=%s, msg=%s, context=%s]",
+                    getClass().getSimpleName(), errorCode, operation, getMessage(), context);
+        }
+    }
+
+    /**
+     * Exception for invalid parameters
+     */
+    public static class InvalidParameterException extends AffinityException {
+        public InvalidParameterException(String operation, String paramName, Object value) {
+            super(ERROR_INVALID_PARAMETER, operation,
+                    String.format("Invalid parameter '%s': %s", paramName, value));
+            addContext("parameter", paramName).addContext("value", value);
+        }
+
+        public InvalidParameterException(String operation, String message) {
+            super(ERROR_INVALID_PARAMETER, operation, message);
+        }
+    }
+
+    /**
+     * Exception for permission-related errors
+     */
+    public static class PermissionDeniedException extends AffinityException {
+        public PermissionDeniedException(String operation, String resource) {
+            super(ERROR_PERMISSION_DENIED, operation,
+                    String.format("Permission denied accessing resource: %s", resource));
+            addContext("resource", resource);
+        }
+
+        public PermissionDeniedException(String operation, String message, Throwable cause) {
+            super(ERROR_PERMISSION_DENIED, operation, message, cause);
+        }
+    }
+
+    /**
+     * Exception for unsupported operations
+     */
+    public static class UnsupportedOperationException extends AffinityException {
+        public UnsupportedOperationException(String operation, String reason) {
+            super(ERROR_NOT_SUPPORTED, operation,
+                    String.format("Operation not supported: %s", reason));
+            addContext("reason", reason);
+        }
+
+        public UnsupportedOperationException(String operation) {
+            super(ERROR_NOT_SUPPORTED, operation, "Operation not supported on this platform");
+            addContext("platform", System.getProperty("os.name"));
+        }
+    }
+
+    /**
+     * Exception for system call failures
+     */
+    public static class SystemCallException extends AffinityException {
+        public SystemCallException(String operation, String syscall, int errno) {
+            super(ERROR_SYSTEM_CALL_FAILED, operation,
+                    String.format("System call '%s' failed with errno %d", syscall, errno));
+            addContext("syscall", syscall).addContext("errno", errno);
+        }
+
+        public SystemCallException(String operation, String syscall, Throwable cause) {
+            super(ERROR_SYSTEM_CALL_FAILED, operation,
+                    String.format("System call '%s' failed", syscall), cause);
+            addContext("syscall", syscall);
+        }
+    }
+
+    /**
+     * Exception for timeout scenarios
+     */
+    public static class TimeoutException extends AffinityException {
+        public TimeoutException(String operation, long timeoutMs) {
+            super(ERROR_TIMEOUT, operation,
+                    String.format("Operation timed out after %dms", timeoutMs));
+            addContext("timeout_ms", timeoutMs);
+        }
+    }
+
+    /**
+     * Exception for hardware-related errors
+     */
+    public static class HardwareException extends AffinityException {
+        public HardwareException(String operation, String feature) {
+            super(ERROR_HARDWARE_NOT_AVAILABLE, operation,
+                    String.format("Required hardware feature not available: %s", feature));
+            addContext("feature", feature);
+        }
+    }
+
+    /**
+     * Exception for NUMA-related errors
+     */
+    public static class NumaException extends AffinityException {
+        public NumaException(String operation, String message) {
+            super(ERROR_NUMA_NOT_AVAILABLE, operation, message);
+        }
+
+        public NumaException(String operation, int nodeId) {
+            super(ERROR_NUMA_NOT_AVAILABLE, operation,
+                    String.format("NUMA node %d not available or NUMA not supported", nodeId));
+            addContext("numa_node", nodeId);
+        }
+    }
+
+    /**
+     * Exception for performance monitoring errors
+     */
+    public static class PerformanceMonitorException extends AffinityException {
+        public PerformanceMonitorException(String operation, String counter) {
+            super(ERROR_PERFORMANCE_COUNTERS_UNAVAILABLE, operation,
+                    String.format("Performance counter not available: %s", counter));
+            addContext("counter", counter);
+        }
+    }
+
+    /**
+     * Exception for configuration errors
+     */
+    public static class ConfigurationException extends RuntimeException {
+        private final String operation;
+
+        public ConfigurationException(String operation, String message) {
+            super(message);
+            this.operation = operation;
+        }
+
+        public String getOperation() { return operation; }
+    }
+
+    /**
+     * Result wrapper for operations that can fail
+     */
+    public static class OperationResult<T> {
+        private final boolean success;
+        private final T value;
+        private final AffinityException error;
+        private final int errorCode;
+
+        private OperationResult(boolean success, T value, AffinityException error, int errorCode) {
+            this.success = success;
+            this.value = value;
+            this.error = error;
+            this.errorCode = errorCode;
+        }
+
+        public static <T> OperationResult<T> success(T value) {
+            return new OperationResult<>(true, value, null, SUCCESS);
+        }
+
+        public static <T> OperationResult<T> failure(AffinityException error) {
+            return new OperationResult<>(false, null, error, error.getErrorCode());
+        }
+
+        public static <T> OperationResult<T> failure(int errorCode, String operation, String message) {
+            return failure(new GenericAffinityException(errorCode, operation, message));
+        }
+
+        public boolean isSuccess() { return success; }
+        public T getValue() { return value; }
+        public AffinityException getError() { return error; }
+        public int getErrorCode() { return errorCode; }
+
+        public T getOrThrow() throws AffinityException {
+            if (!success) {
+                throw error;
+            }
+            return value;
+        }
+
+        public T getOrDefault(T defaultValue) {
+            return success ? value : defaultValue;
+        }
+    }
+
+    /**
+     * Generic affinity exception for cases not covered by specific types
+     */
+    private static class GenericAffinityException extends AffinityException {
+        public GenericAffinityException(int errorCode, String operation, String message) {
+            super(errorCode, operation, message);
+        }
+    }
+
+    /**
+     * Error context builder for comprehensive error reporting
+     */
+    public static class ErrorContext {
+        private final Map<String, Object> context = new HashMap<>();
+
+        public ErrorContext add(String key, Object value) {
+            context.put(key, value);
+            return this;
+        }
+
+        public ErrorContext addSystemInfo() {
+            context.put("os_name", System.getProperty("os.name"));
+            context.put("os_version", System.getProperty("os.version"));
+            context.put("java_version", System.getProperty("java.version"));
+            context.put("timestamp", System.currentTimeMillis());
+            return this;
+        }
+
+        public ErrorContext addThreadInfo() {
+            Thread current = Thread.currentThread();
+            context.put("thread_name", current.getName());
+            context.put("thread_id", current.getId());
+            return this;
+        }
+
+        public Map<String, Object> build() {
+            return new HashMap<>(context);
+        }
+    }
+
+    /**
+     * Utility methods for error handling
+     */
+    public static class ErrorUtils {
+        private static final Logger logger = LoggerFactory.getLogger(ErrorUtils.class);
+
+        public static void logError(AffinityException error) {
+            logger.error("Affinity operation failed: {}", error.toString());
+        }
+
+        public static void logError(String operation, Throwable error) {
+            logger.error("Affinity operation '{}' failed: {}", operation, error.getMessage(), error);
+        }
+
+        public static boolean isRetryableError(int errorCode) {
+            return errorCode == ERROR_RESOURCE_BUSY ||
+                    errorCode == ERROR_TIMEOUT ||
+                    errorCode == ERROR_SYSTEM_CALL_FAILED;
+        }
+
+        public static boolean isPermissionError(int errorCode) {
+            return errorCode == ERROR_PERMISSION_DENIED;
+        }
+
+        public static boolean isFatalError(int errorCode) {
+            return errorCode == ERROR_NOT_SUPPORTED ||
+                    errorCode == ERROR_HARDWARE_NOT_AVAILABLE ||
+                    errorCode == ERROR_KERNEL_VERSION_UNSUPPORTED;
+        }
+    }
+}
