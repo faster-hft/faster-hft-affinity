@@ -2,7 +2,6 @@ package com.faster.affinity.platform;
 
 import com.faster.affinity.config.AffinityConfig;
 import com.faster.affinity.exceptions.*;
-import com.faster.affinity.exceptions.OperationResult;
 import com.faster.affinity.performance.PerfEventCounter;
 import com.sun.jna.*;
 import com.sun.jna.ptr.LongByReference;
@@ -44,6 +43,7 @@ public class LinuxPlatformProvider implements PlatformProvider {
         int getpid();
         long gettid();
         int sysconf(int name);
+        @SuppressWarnings("unused") // May be used for cleanup operations
         int close(int fd);
     }
 
@@ -780,7 +780,8 @@ public class LinuxPlatformProvider implements PlatformProvider {
             }
 
             boolean coreInNode = false;
-            for (int i = 0; i < nodeCpuMask.length && i < coreMask.length; i++) {
+            int minLength = Math.min(nodeCpuMask.length, coreMask.length);
+            for (int i = 0; i < minLength; i++) {
                 if ((nodeCpuMask[i] & coreMask[i]) != 0) {
                     coreInNode = true;
                     break;
@@ -1207,6 +1208,20 @@ public class LinuxPlatformProvider implements PlatformProvider {
             this.utilization = util;
             this.lastUpdateTime = System.currentTimeMillis();
         }
+
+        public int getCoreId() {
+            return coreId;
+        }
+
+        public long getLastUpdateTime() {
+            return lastUpdateTime;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("Core %d: %.2f%% (updated %dms ago)",
+                coreId, utilization * 100, System.currentTimeMillis() - lastUpdateTime);
+        }
     }
 
     // IRQ (Interrupt Request) management implementation
@@ -1259,7 +1274,6 @@ public class LinuxPlatformProvider implements PlatformProvider {
                             irqNumbers.add(irqNumber);
                         } catch (NumberFormatException e) {
                             // Skip lines that don't start with a number
-                            continue;
                         }
                     }
                 }
@@ -1312,7 +1326,7 @@ public class LinuxPlatformProvider implements PlatformProvider {
                                 }
                             }
                         } catch (NumberFormatException e) {
-                            continue;
+                            // Skip invalid IRQ numbers
                         }
                     }
                 }

@@ -2,7 +2,6 @@ package com.faster.affinity.platform;
 
 import com.faster.affinity.config.AffinityConfig;
 import com.faster.affinity.exceptions.*;
-import com.faster.affinity.exceptions.OperationResult;
 import com.sun.jna.*;
 import com.sun.jna.platform.win32.*;
 import com.sun.jna.ptr.IntByReference;
@@ -576,7 +575,11 @@ public class WindowsPlatformProvider implements PlatformProvider {
 
     @Override
     public int getNumaNodeCpus(int nodeId, long[] cpuMask, int maxCores) {
-        if (!numaSupported || cpuMask == null) {
+        if (cpuMask == null) {
+            return ErrorCodes.ERROR_INVALID_PARAMETER;
+        }
+
+        if (!numaSupported) {
             // For single-node systems, return all CPUs for node 0
             if (nodeId == 0 && getNumaNodeCount() == 1) {
                 // Set all CPUs in the mask
@@ -739,6 +742,11 @@ public class WindowsPlatformProvider implements PlatformProvider {
             boolean coreInNode = false;
             if (coreId < 64) {
                 coreInNode = (nodeCpuMask[0] & (1L << coreId)) != 0;
+            } else {
+                int arrayIndex = coreId / 64;
+                if (arrayIndex < nodeCpuMask.length) {
+                    coreInNode = (nodeCpuMask[arrayIndex] & (1L << (coreId % 64))) != 0;
+                }
             }
 
             if (!coreInNode) {
