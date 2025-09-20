@@ -30,6 +30,20 @@ public final class AffinityConfig {
     private static final boolean DEFAULT_RESTORE_IRQ_AFFINITIES_ON_SHUTDOWN = true;
     private static final long DEFAULT_IRQ_SCAN_INTERVAL_MS = 30000; // 30 seconds
 
+    // CPU Governor control defaults (HFT performance optimization)
+    private static final boolean DEFAULT_ENABLE_GOVERNOR_CONTROL = true;
+    private static final boolean DEFAULT_AUTO_SET_PERFORMANCE_GOVERNOR = false;
+    private static final boolean DEFAULT_RESTORE_GOVERNORS_ON_SHUTDOWN = true;
+
+    // Transparent Hugepage control defaults (TLB miss reduction)
+    private static final boolean DEFAULT_ENABLE_HUGEPAGE_CONTROL = true;
+    private static final boolean DEFAULT_AUTO_DISABLE_THP = false;
+    private static final boolean DEFAULT_RESTORE_THP_ON_SHUTDOWN = true;
+
+    // Memory prefetching defaults (cache optimization)
+    private static final boolean DEFAULT_ENABLE_MEMORY_PREFETCHING = true;
+    private static final boolean DEFAULT_AUTO_DETECT_PREFETCH_CAPABILITIES = true;
+
     // Configuration instance
     private static volatile AffinityConfig instance;
     private static final Object lock = new Object();
@@ -55,6 +69,20 @@ public final class AffinityConfig {
     private final boolean restoreIRQAffinitiesOnShutdown;
     private final long irqScanIntervalMs;
 
+    // CPU Governor control fields (HFT performance optimization)
+    private final boolean enableGovernorControl;
+    private final boolean autoSetPerformanceGovernor;
+    private final boolean restoreGovernorsOnShutdown;
+
+    // Transparent Hugepage control fields (TLB miss reduction)
+    private final boolean enableHugepageControl;
+    private final boolean autoDisableTHP;
+    private final boolean restoreTHPOnShutdown;
+
+    // Memory prefetching fields (cache optimization)
+    private final boolean enableMemoryPrefetching;
+    private final boolean autoDetectPrefetchCapabilities;
+
     private AffinityConfig(Builder builder) {
         this.enablePerformanceCounters = builder.enablePerformanceCounters;
         this.enableRealtimeFeatures = builder.enableRealtimeFeatures;
@@ -75,6 +103,16 @@ public final class AffinityConfig {
         this.strictIRQIsolation = builder.strictIRQIsolation;
         this.restoreIRQAffinitiesOnShutdown = builder.restoreIRQAffinitiesOnShutdown;
         this.irqScanIntervalMs = builder.irqScanIntervalMs;
+
+        // HFT Performance optimization initialization
+        this.enableGovernorControl = builder.enableGovernorControl;
+        this.autoSetPerformanceGovernor = builder.autoSetPerformanceGovernor;
+        this.restoreGovernorsOnShutdown = builder.restoreGovernorsOnShutdown;
+        this.enableHugepageControl = builder.enableHugepageControl;
+        this.autoDisableTHP = builder.autoDisableTHP;
+        this.restoreTHPOnShutdown = builder.restoreTHPOnShutdown;
+        this.enableMemoryPrefetching = builder.enableMemoryPrefetching;
+        this.autoDetectPrefetchCapabilities = builder.autoDetectPrefetchCapabilities;
 
         if (developerMode) {
             logger.info("AffinityConfig initialized in developer mode: {}", this);
@@ -178,6 +216,16 @@ public final class AffinityConfig {
     public boolean isRestoreIRQAffinitiesOnShutdown() { return restoreIRQAffinitiesOnShutdown; }
     public long getIRQScanInterval() { return irqScanIntervalMs; }
 
+    // HFT Performance optimization getters
+    public boolean isGovernorControlEnabled() { return enableGovernorControl; }
+    public boolean isAutoSetPerformanceGovernor() { return autoSetPerformanceGovernor; }
+    public boolean isRestoreGovernorsOnShutdown() { return restoreGovernorsOnShutdown; }
+    public boolean isHugepageControlEnabled() { return enableHugepageControl; }
+    public boolean isAutoDisableTHP() { return autoDisableTHP; }
+    public boolean isRestoreTHPOnShutdown() { return restoreTHPOnShutdown; }
+    public boolean isMemoryPrefetchingEnabled() { return enableMemoryPrefetching; }
+    public boolean isAutoDetectPrefetchCapabilities() { return autoDetectPrefetchCapabilities; }
+
     // Validation methods
     public void validateConfiguration() {
         if (maxRetryAttempts < 0 || maxRetryAttempts > 10) {
@@ -224,6 +272,16 @@ public final class AffinityConfig {
         private boolean strictIRQIsolation = DEFAULT_STRICT_IRQ_ISOLATION;
         private boolean restoreIRQAffinitiesOnShutdown = DEFAULT_RESTORE_IRQ_AFFINITIES_ON_SHUTDOWN;
         private long irqScanIntervalMs = DEFAULT_IRQ_SCAN_INTERVAL_MS;
+
+        // HFT Performance optimization builder fields
+        private boolean enableGovernorControl = DEFAULT_ENABLE_GOVERNOR_CONTROL;
+        private boolean autoSetPerformanceGovernor = DEFAULT_AUTO_SET_PERFORMANCE_GOVERNOR;
+        private boolean restoreGovernorsOnShutdown = DEFAULT_RESTORE_GOVERNORS_ON_SHUTDOWN;
+        private boolean enableHugepageControl = DEFAULT_ENABLE_HUGEPAGE_CONTROL;
+        private boolean autoDisableTHP = DEFAULT_AUTO_DISABLE_THP;
+        private boolean restoreTHPOnShutdown = DEFAULT_RESTORE_THP_ON_SHUTDOWN;
+        private boolean enableMemoryPrefetching = DEFAULT_ENABLE_MEMORY_PREFETCHING;
+        private boolean autoDetectPrefetchCapabilities = DEFAULT_AUTO_DETECT_PREFETCH_CAPABILITIES;
 
         public Builder enablePerformanceCounters(boolean enable) {
             this.enablePerformanceCounters = enable;
@@ -308,6 +366,47 @@ public final class AffinityConfig {
 
         public Builder irqScanIntervalMs(long intervalMs) {
             this.irqScanIntervalMs = intervalMs;
+            return this;
+        }
+
+        // HFT Performance optimization builder methods
+        public Builder enableGovernorControl(boolean enable) {
+            this.enableGovernorControl = enable;
+            return this;
+        }
+
+        public Builder autoSetPerformanceGovernor(boolean autoSet) {
+            this.autoSetPerformanceGovernor = autoSet;
+            return this;
+        }
+
+        public Builder restoreGovernorsOnShutdown(boolean restore) {
+            this.restoreGovernorsOnShutdown = restore;
+            return this;
+        }
+
+        public Builder enableHugepageControl(boolean enable) {
+            this.enableHugepageControl = enable;
+            return this;
+        }
+
+        public Builder autoDisableTHP(boolean autoDisable) {
+            this.autoDisableTHP = autoDisable;
+            return this;
+        }
+
+        public Builder restoreTHPOnShutdown(boolean restore) {
+            this.restoreTHPOnShutdown = restore;
+            return this;
+        }
+
+        public Builder enableMemoryPrefetching(boolean enable) {
+            this.enableMemoryPrefetching = enable;
+            return this;
+        }
+
+        public Builder autoDetectPrefetchCapabilities(boolean autoDetect) {
+            this.autoDetectPrefetchCapabilities = autoDetect;
             return this;
         }
 

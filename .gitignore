@@ -8,9 +8,15 @@ target/
 .idea/jarRepositories.xml
 .idea/compiler.xml
 .idea/libraries/
+.idea/workspace.xml
+.idea/usage.statistics.xml
+.idea/shelf/
 *.iws
 *.iml
 *.ipr
+
+# Keep shared run configurations
+!.idea/runConfigurations/
 
 ### Eclipse ###
 .apt_generated
@@ -36,3 +42,33 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+### Testing and Reports ###
+# JaCoCo coverage reports
+target/site/jacoco/
+# Surefire test reports
+target/surefire-reports/
+# Failsafe test reports
+target/failsafe-reports/
+# Test harness output
+test-reports/
+test-output/
+*.log
+
+### Native Libraries ###
+# Platform-specific native libraries
+native/
+*.so
+*.dll
+*.dylib
+
+### Performance Test Data ###
+# Performance baselines (platform-specific)
+performance-baselines/
+# Benchmark results
+benchmark-results/
+
+### Temporary Files ###
+*.tmp
+*.temp
+.cache/

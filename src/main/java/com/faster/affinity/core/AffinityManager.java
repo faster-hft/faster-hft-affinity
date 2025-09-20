@@ -35,6 +35,7 @@ public final class AffinityManager {
     private final PerformanceMonitor performanceMonitor;
     private final NUMAManager numaManager;
     private final IRQManager irqManager;
+    private final CPUGovernorManager cpuGovernorManager;
     private final PlatformProvider platformProvider;
 
     // Caching and state management
@@ -62,6 +63,8 @@ public final class AffinityManager {
                 new NUMAManager(platformProvider, config) : null;
         this.irqManager = config.isIRQManagementEnabled() ?
                 new IRQManager(platformProvider, config) : null;
+        this.cpuGovernorManager = config.isGovernorControlEnabled() ?
+                new CPUGovernorManager(platformProvider, config) : null;
 
         logger.info("AffinityManager created with config: {}", config);
     }
@@ -146,6 +149,9 @@ public final class AffinityManager {
             }
             if (irqManager != null) {
                 irqManager.initialize();
+            }
+            if (cpuGovernorManager != null) {
+                cpuGovernorManager.initialize();
             }
 
             initialized.set(true);
@@ -318,6 +324,56 @@ public final class AffinityManager {
                     "IRQ management is disabled in configuration");
         }
         return irqManager;
+    }
+
+    public CPUGovernorManager getCPUGovernorManager() throws com.faster.affinity.exceptions.UnsupportedOperationException {
+        if (cpuGovernorManager == null) {
+            throw new com.faster.affinity.exceptions.UnsupportedOperationException("getCPUGovernorManager",
+                    "CPU governor control is disabled in configuration");
+        }
+        return cpuGovernorManager;
+    }
+
+    // CPU Governor Control operations (HFT performance optimization)
+
+    public OperationResult<CPUGovernorManager.GovernorMode> getCurrentGovernor(int coreId) {
+        if (cpuGovernorManager == null) {
+            return OperationResult.failure(new com.faster.affinity.exceptions.UnsupportedOperationException("getCurrentGovernor",
+                    "CPU governor control is disabled in configuration"));
+        }
+        return cpuGovernorManager.getCurrentGovernor(coreId);
+    }
+
+    public OperationResult<Void> setGovernor(int coreId, CPUGovernorManager.GovernorMode governor) {
+        if (cpuGovernorManager == null) {
+            return OperationResult.failure(new com.faster.affinity.exceptions.UnsupportedOperationException("setGovernor",
+                    "CPU governor control is disabled in configuration"));
+        }
+        return cpuGovernorManager.setGovernor(coreId, governor);
+    }
+
+    public OperationResult<Void> setAllCoresGovernor(CPUGovernorManager.GovernorMode governor) {
+        if (cpuGovernorManager == null) {
+            return OperationResult.failure(new com.faster.affinity.exceptions.UnsupportedOperationException("setAllCoresGovernor",
+                    "CPU governor control is disabled in configuration"));
+        }
+        return cpuGovernorManager.setAllCoresGovernor(governor);
+    }
+
+    public OperationResult<CPUGovernorManager.GovernorStatus> getGovernorStatus() {
+        if (cpuGovernorManager == null) {
+            return OperationResult.failure(new com.faster.affinity.exceptions.UnsupportedOperationException("getGovernorStatus",
+                    "CPU governor control is disabled in configuration"));
+        }
+        return cpuGovernorManager.getGovernorStatus();
+    }
+
+    public OperationResult<Void> restoreOriginalGovernors() {
+        if (cpuGovernorManager == null) {
+            return OperationResult.failure(new com.faster.affinity.exceptions.UnsupportedOperationException("restoreOriginalGovernors",
+                    "CPU governor control is disabled in configuration"));
+        }
+        return cpuGovernorManager.restoreOriginalGovernors();
     }
 
     // Validation and error handling
@@ -558,6 +614,14 @@ public final class AffinityManager {
             }
         }
 
+        if (cpuGovernorManager != null) {
+            try {
+                cpuGovernorManager.shutdown();
+            } catch (Exception e) {
+                logger.warn("Error shutting down CPU governor manager: {}", e.getMessage());
+            }
+        }
+
         operationCache.clear();
         initialized.set(false);
         initializing.set(false);
@@ -613,6 +677,15 @@ public final class AffinityManager {
         public boolean arePerformanceCountersAvailable() { return performanceCountersAvailable; }
         public boolean isRealtimeSupported() { return realtimeSupported; }
         public String[] getSupportedFeatures() { return supportedFeatures.clone(); }
+
+        public boolean isGovernorControlSupported() {
+            for (String feature : supportedFeatures) {
+                if ("cpu_governor_control".equals(feature)) {
+                    return true;
+                }
+            }
+            return false;
+        }
 
         @Override
         public String toString() {

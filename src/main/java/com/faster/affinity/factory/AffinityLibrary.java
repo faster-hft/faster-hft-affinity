@@ -1,6 +1,7 @@
 package com.faster.affinity.factory;
 
 import com.faster.affinity.core.AffinityManager;
+import com.faster.affinity.core.CPUGovernorManager;
 import com.faster.affinity.core.IRQManager;
 import com.faster.affinity.core.NUMAManager;
 import com.faster.affinity.exceptions.OperationResult;
@@ -55,6 +56,13 @@ public interface AffinityLibrary {
     OperationResult<Void> isolateIRQsFromCores(java.util.BitSet tradingCores);
     OperationResult<IRQManager.IRQIsolationStatus> getIRQIsolationStatus();
     OperationResult<Void> restoreOriginalIRQAffinities();
+
+    // CPU Governor control (HFT performance optimization)
+    OperationResult<CPUGovernorManager.GovernorMode> getCurrentGovernor(int coreId);
+    OperationResult<Void> setGovernor(int coreId, CPUGovernorManager.GovernorMode governor);
+    OperationResult<Void> setAllCoresGovernor(CPUGovernorManager.GovernorMode governor);
+    OperationResult<CPUGovernorManager.GovernorStatus> getGovernorStatus();
+    OperationResult<Void> restoreOriginalGovernors();
 
     // Lifecycle
     void shutdown();

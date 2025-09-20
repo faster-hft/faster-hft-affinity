@@ -1,0 +1,22 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="HFT Performance Tests" type="JUnit" factoryName="JUnit">
+    <module name="faster-thread-affinity" />
+    <option name="PACKAGE_NAME" value="com.faster.affinity.performance" />
+    <option name="MAIN_CLASS_NAME" value="" />
+    <option name="METHOD_NAME" value="" />
+    <option name="TEST_OBJECT" value="package" />
+    <option name="VM_PARAMETERS" value="-Dtest.type=performance -Dhft.mode=true -XX:+UnlockExperimentalVMOptions -XX:+UseZGC -Xmx4g -XX:+AlwaysPreTouch" />
+    <option name="PARAMETERS" value="" />
+    <option name="WORKING_DIRECTORY" value="$MODULE_WORKING_DIR$" />
+    <option name="PASS_PARENT_ENVS" value="true" />
+    <option name="TEST_SEARCH_SCOPE">
+      <value defaultName="singleModule" />
+    </option>
+    <patterns>
+      <pattern testClass="com.faster.affinity.performance.HFTPerformanceRegressionTest" />
+    </patterns>
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

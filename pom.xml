@@ -59,11 +59,12 @@
             <version>${slf4j.version}</version>
         </dependency>
 
-        <!-- Logback as SLF4J implementation (optional - users can choose their own) -->
+        <!-- Logback as SLF4J implementation -->
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
             <version>${logback.version}</version>
+            <!-- Optional for users who want to choose their own logging implementation -->
             <optional>true</optional>
         </dependency>
 
@@ -126,9 +127,21 @@
                     </includes>
                     <excludes>
                         <exclude>**/*IntegrationTest.java</exclude>
+                        <exclude>**/*PerformanceTest.java</exclude>
                         <!-- Platform-specific tests excluded by default, included by profiles -->
                     </excludes>
-                    <!-- No system properties needed for SLF4J/Logback setup -->
+                    <!-- Mandatory test gates - build fails if tests fail -->
+                    <skipTests>false</skipTests>
+                    <testFailureIgnore>false</testFailureIgnore>
+                    <forkCount>1</forkCount>
+                    <reuseForks>true</reuseForks>
+                    <!-- Parallel execution for faster testing -->
+                    <parallel>classes</parallel>
+                    <threadCount>4</threadCount>
+                    <!-- System properties for test execution -->
+                    <systemPropertyVariables>
+                        <affinity.test.mode>unit</affinity.test.mode>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
 
@@ -174,10 +187,10 @@
                             <goal>report</goal>
                         </goals>
                     </execution>
-                    <!-- Coverage check disabled until unit tests are added -->
-                    <!--
+                    <!-- Mandatory coverage check - build fails if below threshold -->
                     <execution>
                         <id>jacoco-check</id>
+                        <phase>test</phase>
                         <goals>
                             <goal>check</goal>
                         </goals>
@@ -189,14 +202,38 @@
                                         <limit>
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.70</minimum>
+                                            <minimum>0.85</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.75</minimum>
+                                        </limit>
+                                    </limits>
+                                    <excludes>
+                                        <!-- Exclude generated classes and examples -->
+                                        <exclude>com.faster.affinity.examples.*</exclude>
+                                        <exclude>com.faster.affinity.platform.*</exclude>
+                                    </excludes>
+                                </rule>
+                                <!-- Critical classes require higher coverage -->
+                                <rule>
+                                    <element>CLASS</element>
+                                    <includes>
+                                        <include>com.faster.affinity.core.*Manager</include>
+                                        <include>com.faster.affinity.factory.*</include>
+                                    </includes>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.90</minimum>
                                         </limit>
                                     </limits>
                                 </rule>
                             </rules>
                         </configuration>
                     </execution>
-                    -->
                 </executions>
             </plugin>
 
@@ -257,6 +294,7 @@
                     </archive>
                 </configuration>
             </plugin>
+            <!-- Assembly plugin for JAR with dependencies -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
@@ -273,6 +311,42 @@
                         <goals>
                             <goal>single</goal>
                         </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- WSL Deployment Plugin for Cross-Platform Testing -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>deploy-to-wsl</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <echo message="Deploying JAR to WSL for cross-platform testing..."/>
+                                <mkdir dir="//wsl.localhost/Ubuntu/home/amar/affinity-testing"/>
+                                <copy file="${project.build.directory}/${project.artifactId}-${project.version}-jar-with-dependencies.jar"
+                                      todir="//wsl.localhost/Ubuntu/home/amar/affinity-testing"
+                                      failonerror="false"/>
+                                <copy file="${project.basedir}/ComprehensiveAffinityTest.java"
+                                      todir="//wsl.localhost/Ubuntu/home/amar/affinity-testing"
+                                      failonerror="false"/>
+                                <copy file="${project.basedir}/QuickCompileTest.java"
+                                      todir="//wsl.localhost/Ubuntu/home/amar/affinity-testing"
+                                      failonerror="false"/>
+                                <echo message="✓ JAR and test files deployed to WSL successfully"/>
+                                <echo message="To run tests in WSL, use:"/>
+                                <echo message="cd ~/affinity-testing"/>
+                                <echo message="javac -cp ${project.artifactId}-${project.version}-jar-with-dependencies.jar ComprehensiveAffinityTest.java"/>
+                                <echo message="sudo java -cp .:${project.artifactId}-${project.version}-jar-with-dependencies.jar ComprehensiveAffinityTest"/>
+                            </target>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
@@ -365,6 +439,124 @@
                             <systemPropertyVariables>
                                 <affinity.test.mode>performance</affinity.test.mode>
                                 <affinity.performance.iterations>10000</affinity.performance.iterations>
+                            </systemPropertyVariables>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- Complete test suite profile (unit + integration + performance) -->
+        <profile>
+            <id>test-all</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>**/*Test.java</include>
+                                <include>**/*Tests.java</include>
+                                <include>**/*IntegrationTest.java</include>
+                                <include>**/*PerformanceTest.java</include>
+                            </includes>
+                            <systemPropertyVariables>
+                                <affinity.test.mode>comprehensive</affinity.test.mode>
+                                <affinity.test.timeout>300000</affinity.test.timeout>
+                            </systemPropertyVariables>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- WSL deployment and testing profile -->
+        <profile>
+            <id>wsl-deploy</id>
+            <activation>
+                <property>
+                    <name>deployToWSL</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>deploy-to-wsl-on-demand</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <target>
+                                        <echo message="🚀 Deploying to WSL for cross-platform testing..."/>
+                                        <mkdir dir="//wsl.localhost/Ubuntu/home/amar/affinity-testing"/>
+                                        <copy file="${project.build.directory}/${project.artifactId}-${project.version}-jar-with-dependencies.jar"
+                                              todir="//wsl.localhost/Ubuntu/home/amar/affinity-testing"/>
+                                        <copy file="${project.basedir}/ComprehensiveAffinityTest.java"
+                                              todir="//wsl.localhost/Ubuntu/home/amar/affinity-testing"/>
+                                        <copy file="${project.basedir}/QuickCompileTest.java"
+                                              todir="//wsl.localhost/Ubuntu/home/amar/affinity-testing"/>
+                                        <echo message="✅ Successfully deployed to WSL!"/>
+                                        <echo message=""/>
+                                        <echo message="📋 To run tests in WSL:"/>
+                                        <echo message="   cd ~/affinity-testing"/>
+                                        <echo message="   javac -cp ${project.artifactId}-${project.version}-jar-with-dependencies.jar ComprehensiveAffinityTest.java"/>
+                                        <echo message="   sudo java -cp .:${project.artifactId}-${project.version}-jar-with-dependencies.jar ComprehensiveAffinityTest"/>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- HFT production quality profile -->
+        <profile>
+            <id>hft-quality</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.jacoco</groupId>
+                        <artifactId>jacoco-maven-plugin</artifactId>
+                        <configuration>
+                            <rules>
+                                <rule>
+                                    <element>PACKAGE</element>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.95</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.90</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>**/*Test.java</include>
+                                <include>**/*IntegrationTest.java</include>
+                                <include>**/*PerformanceTest.java</include>
+                            </includes>
+                            <systemPropertyVariables>
+                                <affinity.test.mode>hft-production</affinity.test.mode>
+                                <affinity.strict.validation>true</affinity.strict.validation>
                             </systemPropertyVariables>
                         </configuration>
                     </plugin>

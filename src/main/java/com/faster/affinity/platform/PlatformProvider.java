@@ -56,6 +56,14 @@ public interface PlatformProvider {
     int setIrqAffinity(int irqNumber, long[] cpuMask, int maskLength);
     int setDefaultIrqAffinity(long[] cpuMask, int maskLength);
 
+    // CPU Governor Control (for HFT performance optimization)
+    com.faster.affinity.core.CPUGovernorManager.GovernorMode getCpuGovernor(int coreId);
+    int setCpuGovernor(int coreId, com.faster.affinity.core.CPUGovernorManager.GovernorMode governor);
+    java.util.List<com.faster.affinity.core.CPUGovernorManager.GovernorMode> getAvailableGovernors(int coreId);
+    long getCpuFrequency(int coreId);
+    long getCpuMinFrequency(int coreId);
+    long getCpuMaxFrequency(int coreId);
+
     // Platform-specific capabilities
     boolean supportsFeature(String feature);
     void initialize() throws Exception;

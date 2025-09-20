@@ -144,7 +144,7 @@ class IRQManagerTest {
         // Setup
         when(mockPlatformProvider.getAllIrqNumbers()).thenReturn(new int[]{24, 25});
         when(mockPlatformProvider.getIrqDescription(24)).thenReturn("eth0-TxRx-0");
-        when(mockPlatformProvider.getIrqDescription(25)).thenReturn("timer");
+        when(mockPlatformProvider.getIrqDescription(25)).thenReturn("lapic-timer");
         when(mockPlatformProvider.getIrqAffinity(anyInt(), any(long[].class), anyInt()))
             .thenAnswer(invocation -> {
                 long[] mask = invocation.getArgument(1);
@@ -164,7 +164,7 @@ class IRQManagerTest {
 
         assertTrue(result.isSuccess());
 
-        // Should have moved network IRQ (24) but not timer IRQ (25)
+        // Should have moved network IRQ (24) but not lapic timer IRQ (25)
         verify(mockPlatformProvider, times(1)).setIrqAffinity(eq(24), any(long[].class), anyInt());
         verify(mockPlatformProvider, never()).setIrqAffinity(eq(25), any(long[].class), anyInt());
     }
@@ -241,5 +241,17 @@ class IRQManagerTest {
         if (irqManager != null) {
             irqManager.shutdown();
         }
+        // Reset all mocks for the next test
+        reset(mockPlatformProvider, mockConfig);
+
+        // Re-configure common mock behavior
+        when(mockConfig.isIRQManagementEnabled()).thenReturn(true);
+        when(mockConfig.isCachingEnabled()).thenReturn(false);
+        when(mockConfig.getIRQScanInterval()).thenReturn(30000L);
+        when(mockConfig.isStrictIRQIsolation()).thenReturn(false);
+        when(mockConfig.isRestoreIRQAffinitiesOnShutdown()).thenReturn(true);
+
+        when(mockPlatformProvider.supportsFeature("irq_management")).thenReturn(true);
+        when(mockPlatformProvider.getCpuCount()).thenReturn(8);
     }
 }

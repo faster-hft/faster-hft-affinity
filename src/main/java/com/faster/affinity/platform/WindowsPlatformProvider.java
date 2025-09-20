@@ -1293,4 +1293,63 @@ public class WindowsPlatformProvider implements PlatformProvider {
         logger.debug("Setting default IRQ affinity not supported on Windows");
         return ErrorCodes.ERROR_NOT_SUPPORTED;
     }
+
+    // CPU Governor Control Implementation (Windows)
+
+    @Override
+    public com.faster.affinity.core.CPUGovernorManager.GovernorMode getCpuGovernor(int coreId) {
+        // Windows doesn't have traditional Linux-style governors
+        // Power management is handled by the OS through power schemes
+        // Default to assuming performance mode for HFT applications
+        logger.debug("CPU governor control not available on Windows - power managed by OS");
+        return com.faster.affinity.core.CPUGovernorManager.GovernorMode.PERFORMANCE;
+    }
+
+    @Override
+    public int setCpuGovernor(int coreId, com.faster.affinity.core.CPUGovernorManager.GovernorMode governor) {
+        // Windows CPU frequency scaling is controlled through:
+        // 1. Power Plans (High Performance, Balanced, Power Saver)
+        // 2. Processor Power Management settings
+        // 3. Platform-specific tools (Intel Turbo Boost, AMD Precision Boost)
+        //
+        // For HFT applications, users should:
+        // - Set Windows to "High Performance" power plan
+        // - Disable CPU throttling in BIOS
+        // - Use platform-specific performance tools
+        logger.debug("CPU governor control not directly supported on Windows - use High Performance power plan");
+        return ErrorCodes.ERROR_NOT_SUPPORTED;
+    }
+
+    @Override
+    public java.util.List<com.faster.affinity.core.CPUGovernorManager.GovernorMode> getAvailableGovernors(int coreId) {
+        // Windows doesn't expose traditional governor modes
+        // Return empty list to indicate no direct governor control
+        logger.debug("Available governors not accessible on Windows");
+        return Collections.emptyList();
+    }
+
+    @Override
+    public long getCpuFrequency(int coreId) {
+        // Windows frequency information can be obtained through:
+        // 1. Performance counters
+        // 2. WMI queries
+        // 3. Registry values
+        // For now, return -1 to indicate unavailable
+        logger.debug("CPU frequency monitoring not implemented for Windows");
+        return -1;
+    }
+
+    @Override
+    public long getCpuMinFrequency(int coreId) {
+        // Would require WMI query or performance counter access
+        logger.debug("CPU min frequency not accessible on Windows");
+        return -1;
+    }
+
+    @Override
+    public long getCpuMaxFrequency(int coreId) {
+        // Would require WMI query or performance counter access
+        logger.debug("CPU max frequency not accessible on Windows");
+        return -1;
+    }
 }

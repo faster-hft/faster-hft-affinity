@@ -323,6 +323,13 @@ public class LinuxPlatformProvider implements PlatformProvider {
         features.add("irq_isolation");
         features.add("interrupt_control");
 
+        // CPU Governor control support (available if cpufreq is present)
+        if (Files.exists(Paths.get("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"))) {
+            features.add("cpu_governor_control");
+            features.add("frequency_scaling");
+            features.add("performance_governor");
+        }
+
         return features.toArray(new String[0]);
     }
 
@@ -1486,6 +1493,135 @@ public class LinuxPlatformProvider implements PlatformProvider {
         } catch (Exception e) {
             logger.debug("Failed to set default IRQ affinity: {}", e.getMessage());
             return ErrorCodes.ERROR_SYSTEM_CALL_FAILED;
+        }
+    }
+
+    // CPU Governor Control Implementation
+
+    @Override
+    public com.faster.affinity.core.CPUGovernorManager.GovernorMode getCpuGovernor(int coreId) {
+        try {
+            Path governorPath = Paths.get("/sys/devices/system/cpu/cpu" + coreId + "/cpufreq/scaling_governor");
+            if (!Files.exists(governorPath)) {
+                logger.debug("Governor file not found for core {}: {}", coreId, governorPath);
+                return null;
+            }
+
+            String governor = Files.readString(governorPath).trim();
+            return com.faster.affinity.core.CPUGovernorManager.GovernorMode.fromString(governor);
+
+        } catch (Exception e) {
+            logger.debug("Failed to get governor for core {}: {}", coreId, e.getMessage());
+            return null;
+        }
+    }
+
+    @Override
+    public int setCpuGovernor(int coreId, com.faster.affinity.core.CPUGovernorManager.GovernorMode governor) {
+        try {
+            Path governorPath = Paths.get("/sys/devices/system/cpu/cpu" + coreId + "/cpufreq/scaling_governor");
+            if (!Files.exists(governorPath)) {
+                logger.debug("Governor file not found for core {}: {}", coreId, governorPath);
+                return ErrorCodes.ERROR_NOT_SUPPORTED;
+            }
+
+            Files.writeString(governorPath, governor.getLinuxName());
+            logger.debug("Set core {} governor to {}", coreId, governor.getLinuxName());
+            return ErrorCodes.SUCCESS;
+
+        } catch (IOException e) {
+            if (e.getMessage() != null && e.getMessage().contains("Permission denied")) {
+                logger.debug("Permission denied setting governor for core {}", coreId);
+                return ErrorCodes.ERROR_PERMISSION_DENIED;
+            }
+            logger.debug("Failed to set governor for core {}: {}", coreId, e.getMessage());
+            return ErrorCodes.ERROR_SYSTEM_CALL_FAILED;
+        } catch (Exception e) {
+            logger.debug("Failed to set governor for core {}: {}", coreId, e.getMessage());
+            return ErrorCodes.ERROR_SYSTEM_CALL_FAILED;
+        }
+    }
+
+    @Override
+    public java.util.List<com.faster.affinity.core.CPUGovernorManager.GovernorMode> getAvailableGovernors(int coreId) {
+        try {
+            Path availablePath = Paths.get("/sys/devices/system/cpu/cpu" + coreId + "/cpufreq/scaling_available_governors");
+            if (!Files.exists(availablePath)) {
+                logger.debug("Available governors file not found for core {}", coreId);
+                return Collections.emptyList();
+            }
+
+            String governors = Files.readString(availablePath).trim();
+            String[] governorArray = governors.split("\\s+");
+
+            List<com.faster.affinity.core.CPUGovernorManager.GovernorMode> availableGovernors = new ArrayList<>();
+            for (String gov : governorArray) {
+                try {
+                    availableGovernors.add(com.faster.affinity.core.CPUGovernorManager.GovernorMode.fromString(gov));
+                } catch (IllegalArgumentException e) {
+                    logger.debug("Unknown governor mode: {}", gov);
+                }
+            }
+
+            return availableGovernors;
+
+        } catch (Exception e) {
+            logger.debug("Failed to get available governors for core {}: {}", coreId, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    @Override
+    public long getCpuFrequency(int coreId) {
+        try {
+            Path freqPath = Paths.get("/sys/devices/system/cpu/cpu" + coreId + "/cpufreq/scaling_cur_freq");
+            if (!Files.exists(freqPath)) {
+                logger.debug("Current frequency file not found for core {}", coreId);
+                return -1;
+            }
+
+            String freqStr = Files.readString(freqPath).trim();
+            return Long.parseLong(freqStr) * 1000; // Convert kHz to Hz
+
+        } catch (Exception e) {
+            logger.debug("Failed to get current frequency for core {}: {}", coreId, e.getMessage());
+            return -1;
+        }
+    }
+
+    @Override
+    public long getCpuMinFrequency(int coreId) {
+        try {
+            Path freqPath = Paths.get("/sys/devices/system/cpu/cpu" + coreId + "/cpufreq/scaling_min_freq");
+            if (!Files.exists(freqPath)) {
+                logger.debug("Min frequency file not found for core {}", coreId);
+                return -1;
+            }
+
+            String freqStr = Files.readString(freqPath).trim();
+            return Long.parseLong(freqStr) * 1000; // Convert kHz to Hz
+
+        } catch (Exception e) {
+            logger.debug("Failed to get min frequency for core {}: {}", coreId, e.getMessage());
+            return -1;
+        }
+    }
+
+    @Override
+    public long getCpuMaxFrequency(int coreId) {
+        try {
+            Path freqPath = Paths.get("/sys/devices/system/cpu/cpu" + coreId + "/cpufreq/scaling_max_freq");
+            if (!Files.exists(freqPath)) {
+                logger.debug("Max frequency file not found for core {}", coreId);
+                return -1;
+            }
+
+            String freqStr = Files.readString(freqPath).trim();
+            return Long.parseLong(freqStr) * 1000; // Convert kHz to Hz
+
+        } catch (Exception e) {
+            logger.debug("Failed to get max frequency for core {}: {}", coreId, e.getMessage());
+            return -1;
         }
     }
 }

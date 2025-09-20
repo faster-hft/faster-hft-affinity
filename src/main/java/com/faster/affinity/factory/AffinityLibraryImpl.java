@@ -2,6 +2,7 @@ package com.faster.affinity.factory;
 
 import com.faster.affinity.config.AffinityConfig;
 import com.faster.affinity.core.AffinityManager;
+import com.faster.affinity.core.CPUGovernorManager;
 import com.faster.affinity.core.IRQManager;
 import com.faster.affinity.core.NUMAManager;
 import com.faster.affinity.exceptions.*;
@@ -297,6 +298,38 @@ class AffinityLibraryImpl implements AffinityLibrary {
         } catch (com.faster.affinity.exceptions.UnsupportedOperationException e) {
             return OperationResult.failure(e);
         }
+    }
+
+    // CPU Governor control (HFT performance optimization) methods
+
+    @Override
+    public OperationResult<CPUGovernorManager.GovernorMode> getCurrentGovernor(int coreId) {
+        checkInitialized();
+        return affinityManager.getCurrentGovernor(coreId);
+    }
+
+    @Override
+    public OperationResult<Void> setGovernor(int coreId, CPUGovernorManager.GovernorMode governor) {
+        checkInitialized();
+        return affinityManager.setGovernor(coreId, governor);
+    }
+
+    @Override
+    public OperationResult<Void> setAllCoresGovernor(CPUGovernorManager.GovernorMode governor) {
+        checkInitialized();
+        return affinityManager.setAllCoresGovernor(governor);
+    }
+
+    @Override
+    public OperationResult<CPUGovernorManager.GovernorStatus> getGovernorStatus() {
+        checkInitialized();
+        return affinityManager.getGovernorStatus();
+    }
+
+    @Override
+    public OperationResult<Void> restoreOriginalGovernors() {
+        checkInitialized();
+        return affinityManager.restoreOriginalGovernors();
     }
 
     @Override
