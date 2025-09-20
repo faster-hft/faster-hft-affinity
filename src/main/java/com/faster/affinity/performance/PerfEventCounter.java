@@ -227,20 +227,26 @@ public class PerfEventCounter implements AutoCloseable {
      * This provides an additional safety net beyond the cleaner.
      */
     private static volatile boolean shutdownHookRegistered = false;
+    private static final AtomicBoolean shutdownHookLock = new AtomicBoolean(false);
 
     private static void registerShutdownHookIfNeeded() {
+        // Use lock-free double-checked locking pattern with volatile field
         if (!shutdownHookRegistered) {
-            synchronized (PerfEventCounter.class) {
-                if (!shutdownHookRegistered) {
-                    Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                        logger.debug("Shutdown hook cleaning up {} remaining PerfEventCounters", activeCounters.size());
-                        for (CleanupAction action : activeCounters) {
-                            action.run();
-                        }
-                        activeCounters.clear();
-                    }, "PerfEventCounter-Cleanup"));
-                    shutdownHookRegistered = true;
-                    logger.debug("Registered PerfEventCounter shutdown hook");
+            if (shutdownHookLock.compareAndSet(false, true)) {
+                try {
+                    if (!shutdownHookRegistered) {
+                        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                            logger.debug("Shutdown hook cleaning up {} remaining PerfEventCounters", activeCounters.size());
+                            for (CleanupAction action : activeCounters) {
+                                action.run();
+                            }
+                            activeCounters.clear();
+                        }, "PerfEventCounter-Cleanup"));
+                        shutdownHookRegistered = true;
+                        logger.debug("Registered PerfEventCounter shutdown hook");
+                    }
+                } finally {
+                    shutdownHookLock.set(false);
                 }
             }
         }

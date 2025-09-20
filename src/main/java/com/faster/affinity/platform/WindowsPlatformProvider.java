@@ -24,7 +24,7 @@ public class WindowsPlatformProvider implements PlatformProvider {
 
     // Extended Windows kernel32 and system interfaces
     private interface WindowsKernel32Ex extends Library {
-        WindowsKernel32Ex INSTANCE = Native.load("kernel32", WindowsKernel32Ex.class);
+        WindowsKernel32Ex INSTANCE = SecureNativeLoader.loadLibrary("kernel32", WindowsKernel32Ex.class);
 
         // Thread and process affinity
         Pointer SetThreadAffinityMask(WinNT.HANDLE hThread, Pointer dwThreadAffinityMask);
@@ -121,7 +121,7 @@ public class WindowsPlatformProvider implements PlatformProvider {
 
     // Performance monitoring - with proper resource management
     private final ConcurrentHashMap<Integer, WindowsCorePerformanceTracker> coreTrackers = new ConcurrentHashMap<>();
-    private final Set<WinNT.HANDLE> openHandles = Collections.synchronizedSet(new HashSet<>());
+    private final ConcurrentHashMap<WinNT.HANDLE, Boolean> openHandles = new ConcurrentHashMap<>();
 
     public WindowsPlatformProvider(AffinityConfig config) {
         this.config = config;
@@ -178,14 +178,13 @@ public class WindowsPlatformProvider implements PlatformProvider {
         });
         coreTrackers.clear();
 
-        // Clean up any open handles
-        synchronized (openHandles) {
-            for (WinNT.HANDLE handle : openHandles) {
-                try {
-                    WindowsKernel32Ex.INSTANCE.CloseHandle(handle);
-                } catch (Exception e) {
-                    logger.debug("Error closing handle: {}", e.getMessage());
-                }
+        // Clean up any open handles - lock-free iteration
+        for (WinNT.HANDLE handle : openHandles.keySet()) {
+            try {
+                WindowsKernel32Ex.INSTANCE.CloseHandle(handle);
+                openHandles.remove(handle);
+            } catch (Exception e) {
+                logger.debug("Error closing handle: {}", e.getMessage());
             }
             openHandles.clear();
         }
@@ -986,7 +985,7 @@ public class WindowsPlatformProvider implements PlatformProvider {
                     WindowsKernel32Ex.THREAD_SET_INFORMATION | WindowsKernel32Ex.THREAD_QUERY_INFORMATION,
                     false, (int) tid);
             if (handle != null) {
-                openHandles.add(handle);
+                openHandles.put(handle, Boolean.TRUE);
             }
             return handle;
         }
@@ -1000,7 +999,7 @@ public class WindowsPlatformProvider implements PlatformProvider {
                     WindowsKernel32Ex.PROCESS_SET_INFORMATION | WindowsKernel32Ex.PROCESS_QUERY_INFORMATION,
                     false, pid);
             if (handle != null) {
-                openHandles.add(handle);
+                openHandles.put(handle, Boolean.TRUE);
             }
             return handle;
         }

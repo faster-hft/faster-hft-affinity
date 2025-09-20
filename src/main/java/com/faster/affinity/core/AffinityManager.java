@@ -33,8 +33,7 @@ public final class AffinityManager {
     private static final int MAX_SUPPORTED_CPUS = 4096;
     private static final int MAX_LONG_ARRAY_SIZE = (MAX_SUPPORTED_CPUS + 63) / 64;
 
-    private static volatile AffinityManager instance;
-    private static final ReentrantLock instanceLock = new ReentrantLock();
+    private static final AtomicReference<AffinityManager> instanceRef = new AtomicReference<>();
 
     private final AffinityConfig config;
     private final TopologyDetector topologyDetector;
@@ -91,19 +90,22 @@ public final class AffinityManager {
     }
 
     public static AffinityManager getInstance() throws ConfigurationException {
-        AffinityManager result = instance;
+        AffinityManager result = instanceRef.get();
         if (result == null) {
-            instanceLock.lock();
-            try {
-                result = instance;
-                if (result == null) {
-                    result = new AffinityManager(AffinityConfig.getInstance());
-                    // Initialize before setting instance to prevent race conditions
-                    result.initialize();
-                    instance = result;
+            // Lock-free singleton initialization
+            AffinityManager newInstance = new AffinityManager(AffinityConfig.getInstance());
+            newInstance.initialize();
+
+            if (instanceRef.compareAndSet(null, newInstance)) {
+                return newInstance;
+            } else {
+                // Another thread won the race, cleanup and use theirs
+                try {
+                    newInstance.shutdown();
+                } catch (Exception e) {
+                    logger.debug("Error cleaning up unused manager instance: {}", e.getMessage());
                 }
-            } finally {
-                instanceLock.unlock();
+                return instanceRef.get();
             }
         } else if (!result.initialized.get()) {
             // Handle case where instance exists but initialization failed
@@ -113,23 +115,21 @@ public final class AffinityManager {
     }
 
     public static AffinityManager getInstance(AffinityConfig config) throws ConfigurationException {
-        instanceLock.lock();
-        try {
-            if (instance != null) {
-                logger.warn("Replacing existing AffinityManager instance");
-                try {
-                    instance.shutdown();
-                } catch (Exception e) {
-                    logger.warn("Error shutting down existing instance: {}", e.getMessage());
-                }
+        // Lock-free replacement
+        AffinityManager oldInstance = instanceRef.get();
+        if (oldInstance != null) {
+            logger.warn("Replacing existing AffinityManager instance");
+            try {
+                oldInstance.shutdown();
+            } catch (Exception e) {
+                logger.warn("Error shutting down existing instance: {}", e.getMessage());
             }
-            AffinityManager newInstance = new AffinityManager(config);
-            newInstance.initialize();
-            instance = newInstance;
-            return newInstance;
-        } finally {
-            instanceLock.unlock();
         }
+
+        AffinityManager newInstance = new AffinityManager(config);
+        newInstance.initialize();
+        instanceRef.set(newInstance);
+        return newInstance;
     }
 
     private void initialize() throws ConfigurationException {
@@ -138,14 +138,16 @@ public final class AffinityManager {
         }
 
         if (!initializing.compareAndSet(false, true)) {
-            // Another thread is initializing, wait for it
+            // Another thread is initializing, use lock-free waiting with timeout
+            long startTime = System.nanoTime();
+            long timeoutNanos = 5_000_000_000L; // 5 seconds timeout
+
             while (initializing.get() && !initialized.get()) {
-                try {
-                    Thread.sleep(10);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new ConfigurationException("initialize", "Initialization interrupted");
+                if (System.nanoTime() - startTime > timeoutNanos) {
+                    throw new ConfigurationException("initialize", "Initialization timeout waiting for another thread");
                 }
+                // Use pause instruction instead of sleep for CPU efficiency
+                Thread.onSpinWait();
             }
             if (!initialized.get()) {
                 throw new ConfigurationException("initialize", "Initialization failed in another thread");
@@ -679,13 +681,13 @@ public final class AffinityManager {
                     logger.debug("Retrying operation {} (attempt {}/{}): {}",
                             operation, attempts, maxRetries + 1, e.getMessage());
 
-                    // Exponential backoff with jitter
-                    try {
-                        long backoffTime = Math.min(100 * (1L << (attempts - 1)), 1000);
-                        Thread.sleep(backoffTime);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        return OperationResult.failure(new TimeoutException(operation, timeout));
+                    // Lock-free exponential backoff using spin-wait
+                    long backoffNanos = Math.min(100_000 * (1L << (attempts - 1)), 1_000_000); // Convert to nanos
+                    long endTime = System.nanoTime() + backoffNanos;
+
+                    // Active wait for better latency in HFT scenarios
+                    while (System.nanoTime() < endTime) {
+                        Thread.onSpinWait(); // CPU pause instruction
                     }
                 } else {
                     ErrorUtils.logError(e);

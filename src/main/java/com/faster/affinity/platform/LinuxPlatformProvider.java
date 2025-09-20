@@ -3,6 +3,7 @@ package com.faster.affinity.platform;
 import com.faster.affinity.config.AffinityConfig;
 import com.faster.affinity.exceptions.*;
 import com.faster.affinity.performance.PerfEventCounter;
+import com.faster.affinity.validation.InputValidator;
 import com.sun.jna.*;
 import com.sun.jna.ptr.LongByReference;
 import org.slf4j.Logger;
@@ -35,7 +36,7 @@ public class LinuxPlatformProvider implements PlatformProvider {
 
     // Linux system call interfaces
     private interface LinuxLibC extends Library {
-        LinuxLibC INSTANCE = Native.load("c", LinuxLibC.class);
+        LinuxLibC INSTANCE = SecureNativeLoader.loadLibrary("c", LinuxLibC.class);
 
         int sched_setaffinity(int pid, int cpusetsize, Pointer mask);
         int sched_getaffinity(int pid, int cpusetsize, Pointer mask);
@@ -63,9 +64,9 @@ public class LinuxPlatformProvider implements PlatformProvider {
 
     private static LinuxNuma loadNumaLibrary() {
         try {
-            return Native.load("numa", LinuxNuma.class);
-        } catch (UnsatisfiedLinkError e) {
-            logger.debug("NUMA library not available: {}", e.getMessage());
+            return SecureNativeLoader.loadLibrary("numa", LinuxNuma.class);
+        } catch (SecurityException | UnsatisfiedLinkError e) {
+            logger.debug("NUMA library not available or validation failed: {}", e.getMessage());
             return null;
         }
     }
@@ -215,31 +216,39 @@ public class LinuxPlatformProvider implements PlatformProvider {
 
     @Override
     public int setThreadAffinity(long tid, long[] cpuMask, int maskLength) {
-        if (cpuMask == null || maskLength <= 0) {
+        // Comprehensive input validation
+        try {
+            InputValidator.validateThreadId(tid, "setThreadAffinity");
+            InputValidator.validateLongArray(cpuMask, "cpuMask", "setThreadAffinity");
+            InputValidator.validateRange(maskLength, 1, 16, "maskLength", "setThreadAffinity");
+        } catch (IllegalArgumentException e) {
+            logger.error("Input validation failed for setThreadAffinity: {}", e.getMessage());
             return ErrorCodes.ERROR_INVALID_PARAMETER;
         }
 
         try {
+            final int finalMaskLength = Math.min(maskLength, 16);
             if (maskLength > 16) {
                 logger.warn("CPU mask length {} exceeds maximum supported size", maskLength);
-                maskLength = 16;
             }
 
-            Memory mask = new Memory(8L * maskLength);
-            for (int i = 0; i < maskLength && i < cpuMask.length; i++) {
-                mask.setLong(i * 8L, cpuMask[i]);
-            }
+            // Use managed memory to prevent leaks
+            return ResourceManager.withManagedMemory(8L * finalMaskLength, mask -> {
+                for (int i = 0; i < finalMaskLength && i < cpuMask.length; i++) {
+                    mask.setLong(i * 8L, cpuMask[i]);
+                }
 
-            int result = LinuxLibC.INSTANCE.sched_setaffinity((int) tid, (int) mask.size(), mask);
+                int result = LinuxLibC.INSTANCE.sched_setaffinity((int) tid, (int) mask.size(), mask);
 
-            if (result == 0) {
-                logger.debug("Set thread {} affinity successfully", tid);
-                return ErrorCodes.SUCCESS;
-            } else {
-                int errno = Native.getLastError();
-                logger.debug("sched_setaffinity failed with errno {}", errno);
-                return mapErrnoToErrorCode(errno);
-            }
+                if (result == 0) {
+                    logger.debug("Set thread {} affinity successfully", tid);
+                    return ErrorCodes.SUCCESS;
+                } else {
+                    int errno = Native.getLastError();
+                    logger.debug("sched_setaffinity failed with errno {}", errno);
+                    return mapErrnoToErrorCode(errno);
+                }
+            });
 
         } catch (Exception e) {
             logger.error("Exception in setThreadAffinity: {}", e.getMessage(), e);

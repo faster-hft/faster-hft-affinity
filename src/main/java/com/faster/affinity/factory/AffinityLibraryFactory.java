@@ -47,13 +47,19 @@ public final class AffinityLibraryFactory {
     public static AffinityLibrary getDefault() {
         AffinityLibrary instance = defaultInstance.get();
         if (instance == null) {
-            synchronized (defaultInstance) {
-                instance = defaultInstance.get();
-                if (instance == null) {
-                    instance = create();
-                    defaultInstance.set(instance);
-                    logger.info("Created default affinity library instance");
+            // Lock-free initialization using AtomicReference compareAndSet
+            AffinityLibrary newInstance = create();
+            if (defaultInstance.compareAndSet(null, newInstance)) {
+                logger.info("Created default affinity library instance");
+                return newInstance;
+            } else {
+                // Another thread won the race, use their instance
+                try {
+                    newInstance.shutdown();
+                } catch (Exception e) {
+                    logger.debug("Error cleaning up unused instance: {}", e.getMessage());
                 }
+                return defaultInstance.get();
             }
         }
         return instance;
@@ -63,17 +69,16 @@ public final class AffinityLibraryFactory {
      * Sets a custom default instance.
      */
     public static void setDefault(AffinityLibrary instance) {
-        synchronized (defaultInstance) {
-            AffinityLibrary old = defaultInstance.getAndSet(instance);
-            if (old != null && old != instance) {
-                try {
-                    old.shutdown();
-                } catch (Exception e) {
-                    logger.warn("Error shutting down old default instance: {}", e.getMessage());
-                }
+        // Lock-free atomic swap
+        AffinityLibrary old = defaultInstance.getAndSet(instance);
+        if (old != null && old != instance) {
+            try {
+                old.shutdown();
+            } catch (Exception e) {
+                logger.warn("Error shutting down old default instance: {}", e.getMessage());
             }
-            logger.info("Set custom default affinity library instance");
         }
+        logger.info("Set custom default affinity library instance");
     }
 
     /**
@@ -87,15 +92,14 @@ public final class AffinityLibraryFactory {
      * Shuts down the default instance if it exists.
      */
     public static void shutdownDefault() {
-        synchronized (defaultInstance) {
-            AffinityLibrary instance = defaultInstance.getAndSet(null);
-            if (instance != null) {
-                try {
-                    instance.shutdown();
-                    logger.info("Shut down default affinity library instance");
-                } catch (Exception e) {
-                    logger.error("Error shutting down default instance: {}", e.getMessage(), e);
-                }
+        // Lock-free atomic swap
+        AffinityLibrary instance = defaultInstance.getAndSet(null);
+        if (instance != null) {
+            try {
+                instance.shutdown();
+                logger.info("Shut down default affinity library instance");
+            } catch (Exception e) {
+                logger.error("Error shutting down default instance: {}", e.getMessage(), e);
             }
         }
     }

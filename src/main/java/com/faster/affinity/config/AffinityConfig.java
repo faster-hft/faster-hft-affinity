@@ -3,6 +3,7 @@ package com.faster.affinity.config;
 import java.util.Properties;
 import java.io.InputStream;
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,8 +46,7 @@ public final class AffinityConfig {
     private static final boolean DEFAULT_AUTO_DETECT_PREFETCH_CAPABILITIES = true;
 
     // Configuration instance
-    private static volatile AffinityConfig instance;
-    private static final Object lock = new Object();
+    private static final AtomicReference<AffinityConfig> instanceRef = new AtomicReference<>();
 
     // Configuration fields
     private final boolean enablePerformanceCounters;
@@ -120,21 +120,24 @@ public final class AffinityConfig {
     }
 
     public static AffinityConfig getInstance() {
-        if (instance == null) {
-            synchronized (lock) {
-                if (instance == null) {
-                    instance = loadFromProperties();
-                }
+        AffinityConfig config = instanceRef.get();
+        if (config == null) {
+            // Lock-free initialization
+            AffinityConfig newConfig = loadFromProperties();
+            if (instanceRef.compareAndSet(null, newConfig)) {
+                return newConfig;
+            } else {
+                // Another thread won the race
+                return instanceRef.get();
             }
         }
-        return instance;
+        return config;
     }
 
     public static void setInstance(AffinityConfig config) {
-        synchronized (lock) {
-            instance = config;
-            logger.info("AffinityConfig instance updated: {}", config);
-        }
+        // Lock-free atomic update
+        instanceRef.set(config);
+        logger.info("AffinityConfig instance updated: {}", config);
     }
 
     /**
