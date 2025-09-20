@@ -111,6 +111,9 @@
                         <arg>-parameters</arg>
                         <arg>-Xlint:unchecked</arg>
                         <arg>-Xlint:deprecation</arg>
+                        <!-- Enable access to JIT compilation hints for HFT optimizations -->
+                        <arg>--add-exports</arg>
+                        <arg>java.base/jdk.internal.vm.annotation=ALL-UNNAMED</arg>
                     </compilerArgs>
                 </configuration>
             </plugin>
@@ -142,6 +145,8 @@
                     <systemPropertyVariables>
                         <affinity.test.mode>unit</affinity.test.mode>
                     </systemPropertyVariables>
+                    <!-- JVM arguments for HFT optimizations -->
+                    <argLine>--add-exports java.base/jdk.internal.vm.annotation=ALL-UNNAMED</argLine>
                 </configuration>
             </plugin>
 
@@ -158,6 +163,8 @@
                     <systemPropertyVariables>
                         <affinity.test.mode>integration</affinity.test.mode>
                     </systemPropertyVariables>
+                    <!-- JVM arguments for HFT optimizations -->
+                    <argLine>--add-exports java.base/jdk.internal.vm.annotation=ALL-UNNAMED</argLine>
                 </configuration>
                 <executions>
                     <execution>

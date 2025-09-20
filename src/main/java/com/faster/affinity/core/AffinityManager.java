@@ -7,6 +7,12 @@ import com.faster.affinity.performance.PerformanceMonitor;
 import com.faster.affinity.platform.PlatformProvider;
 import com.faster.affinity.platform.PlatformProviderFactory;
 import com.faster.affinity.topology.TopologyDetector;
+import com.faster.affinity.cache.HotPathCache;
+import com.faster.affinity.pool.ObjectPoolManager;
+import com.faster.affinity.numa.NumaAffinityChecker;
+import com.faster.affinity.performance.HFTPerformanceProfiler;
+import jdk.internal.vm.annotation.DontInline;
+import jdk.internal.vm.annotation.ForceInline;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.BitSet;
@@ -46,7 +52,16 @@ public final class AffinityManager {
     private final AtomicBoolean initializing = new AtomicBoolean(false);
     private final AtomicReference<SystemCapabilities> systemCapabilities = new AtomicReference<>();
 
-    // Thread-local arrays for performance
+    // High-performance caching infrastructure
+    private final HotPathCache hotPathCache = new HotPathCache();
+
+    // Lock-free operations for hot paths
+    private volatile LockFreeAffinityOperations lockFreeOps;
+
+    // HFT Performance profiler
+    private volatile HFTPerformanceProfiler hftProfiler;
+
+    // Thread-local arrays for performance (legacy - being replaced by HotPathCache)
     private static final ThreadLocal<long[]> TL_MASK_ARRAY = ThreadLocal.withInitial(() -> new long[MAX_LONG_ARRAY_SIZE]);
     private static final ThreadLocal<int[]> TL_INT_ARRAY = ThreadLocal.withInitial(() -> new int[8]);
 
@@ -166,6 +181,18 @@ public final class AffinityManager {
                 prefetchManager.initialize();
             }
 
+            // Initialize HFT performance profiler
+            hftProfiler = new HFTPerformanceProfiler(hotPathCache);
+
+            // Initialize lock-free operations for hot paths
+            lockFreeOps = new LockFreeAffinityOperations(platformProvider, hotPathCache);
+
+            // Enable NUMA-aware pooling if NUMA is available
+            if (numaManager != null && numaManager.isAvailable()) {
+                NumaAffinityChecker numaChecker = new NumaAffinityChecker(platformProvider, numaManager);
+                ObjectPoolManager.enableNumaAwareness(numaChecker);
+            }
+
             initialized.set(true);
             logger.info("AffinityManager initialized successfully: {}", caps);
 
@@ -184,8 +211,93 @@ public final class AffinityManager {
         return initialized.get();
     }
 
+    /**
+     * Get HFT performance statistics for monitoring and optimization.
+     */
+    public HFTPerformanceProfiler.HFTPerformanceStats getHFTPerformanceStats() {
+        if (hftProfiler != null) {
+            return hftProfiler.getStats();
+        }
+        return null;
+    }
+
+    /**
+     * Reset HFT performance statistics.
+     */
+    public void resetHFTPerformanceStats() {
+        if (hftProfiler != null) {
+            hftProfiler.reset();
+        }
+    }
+
+    /**
+     * Enable or disable HFT performance monitoring.
+     */
+    public void setHFTPerformanceMonitoringEnabled(boolean enabled) {
+        if (hftProfiler != null) {
+            hftProfiler.setEnabled(enabled);
+        }
+    }
+
     // Core CPU Affinity Operations
 
+    /**
+     * High-performance version of getCurrentThreadAffinity for hot paths.
+     * Uses lock-free caching and pre-allocated objects.
+     */
+    @ForceInline
+    public OperationResult<BitSet> getCurrentThreadAffinityFast() {
+        long startTime = System.nanoTime();
+
+        if (lockFreeOps != null) {
+            OperationResult<BitSet> result = lockFreeOps.getCurrentThreadAffinityFast();
+            if (hftProfiler != null) {
+                hftProfiler.recordHotPathOperation(System.nanoTime() - startTime);
+            }
+            return result;
+        }
+
+        // Fallback to standard implementation
+        OperationResult<BitSet> result = getThreadAffinity(platformProvider.getCurrentThreadId());
+        if (hftProfiler != null) {
+            hftProfiler.recordFallbackOperation(System.nanoTime() - startTime);
+        }
+        return result;
+    }
+
+    /**
+     * High-performance version of setCurrentThreadAffinity for hot paths.
+     * Uses lock-free caching and pre-allocated objects.
+     */
+    @ForceInline
+    public OperationResult<Void> setCurrentThreadAffinityFast(BitSet cpuMask) {
+        if (lockFreeOps != null) {
+            return lockFreeOps.setCurrentThreadAffinityFast(cpuMask);
+        }
+        // Fallback to standard implementation
+        return setThreadAffinity(platformProvider.getCurrentThreadId(), cpuMask);
+    }
+
+    /**
+     * Bulk affinity operations for multiple threads (hot path optimized).
+     */
+    @ForceInline
+    public int setBulkThreadAffinityFast(long[] threadIds, BitSet cpuMask) {
+        if (lockFreeOps != null) {
+            return lockFreeOps.setBulkThreadAffinity(threadIds, cpuMask);
+        }
+        // Fallback implementation
+        int successCount = 0;
+        for (long threadId : threadIds) {
+            OperationResult<Void> result = setThreadAffinity(threadId, cpuMask);
+            if (result.isSuccess()) {
+                successCount++;
+            }
+        }
+        return successCount;
+    }
+
+    @ForceInline
     public OperationResult<Void> setThreadAffinity(long threadId, BitSet cpuMask) {
         return executeWithRetry("setThreadAffinity", () -> {
             validateParameters("setThreadAffinity", threadId, cpuMask);
@@ -219,6 +331,7 @@ public final class AffinityManager {
         });
     }
 
+    @ForceInline
     public OperationResult<BitSet> getThreadAffinity(long threadId) {
         return executeWithRetry("getThreadAffinity", () -> {
             validateParameters("getThreadAffinity", threadId);
@@ -497,6 +610,7 @@ public final class AffinityManager {
 
     // Validation and error handling
 
+    @DontInline
     private void validateParameters(String operation, Object... params) throws InvalidParameterException {
         if (!config.isParameterValidationEnabled()) {
             return;
@@ -607,6 +721,7 @@ public final class AffinityManager {
         }
     }
 
+    @DontInline
     private AffinityException createExceptionForErrorCode(int errorCode, String operation, Map<String, Object> context) {
         String description = ErrorCodes.getErrorDescription(errorCode);
 
