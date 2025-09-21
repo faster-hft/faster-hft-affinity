@@ -103,6 +103,8 @@ jobs:
 
       - name: Run unit tests
         run: mvn test -B -fae
+        env:
+          AFFINITY_DEVELOPER_MODE: ${{ runner.os == 'macOS' && 'true' || 'false' }}
 
       - name: Run Linux-specific tests
         if: runner.os == 'Linux'
@@ -112,10 +114,17 @@ jobs:
         if: runner.os == 'Windows'
         run: mvn test -B -fae -Pwindows
 
+      - name: Run macOS-specific tests (mock mode)
+        if: runner.os == 'macOS'
+        run: mvn test -B -fae -Pmock
+        env:
+          AFFINITY_DEVELOPER_MODE: true
+
       - name: Run integration tests
         run: mvn verify -B -fae
         env:
           AFFINITY_TEST_MODE: integration
+          AFFINITY_DEVELOPER_MODE: ${{ runner.os == 'macOS' && 'true' || 'false' }}
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

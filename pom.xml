@@ -644,6 +644,35 @@
                 </plugins>
             </build>
         </profile>
+
+        <!-- Mock profile for unsupported platforms (macOS) -->
+        <profile>
+            <id>mock</id>
+            <properties>
+                <platform.classifier>mock</platform.classifier>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <excludes>
+                                <exclude>**/LinuxAffinityTest.java</exclude>
+                                <exclude>**/WindowsAffinityTest.java</exclude>
+                                <exclude>**/HFTPerformanceBenchmarkTest.java</exclude>
+                                <exclude>**/HFTPerformanceRegressionTest.java</exclude>
+                            </excludes>
+                            <systemPropertyVariables>
+                                <affinity.platform>mock</affinity.platform>
+                                <affinity.test.native>false</affinity.test.native>
+                                <affinity.developer.mode>true</affinity.developer.mode>
+                            </systemPropertyVariables>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 
     <!-- Repositories -->
