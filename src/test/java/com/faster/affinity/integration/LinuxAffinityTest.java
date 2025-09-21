@@ -25,8 +25,12 @@ public class LinuxAffinityTest {
     @BeforeAll
     void setUp() {
         try {
+            // Reset ThreadLocal state for test isolation
+            com.faster.affinity.utils.ThreadLocalManager.resetForTesting();
+
             // Create a test-friendly configuration
             com.faster.affinity.config.AffinityConfig testConfig = com.faster.affinity.config.AffinityConfig.builder()
+                .testMode(true)                     // Disable rate limiting for high-frequency tests
                 .enablePerformanceCounters(false)  // Disable to avoid initialization issues
                 .enableNumaOperations(false)       // Disable to avoid NUMA issues in tests
                 .enableIRQManagement(false)        // Disable to avoid permission issues

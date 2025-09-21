@@ -25,7 +25,16 @@ public class WindowsAffinityTest {
 
     @BeforeAll
     void setUp() {
-        this.affinityLib = AffinityLibraryFactory.getDefault();
+        // Create test configuration with rate limiting disabled for high-frequency tests
+        com.faster.affinity.config.AffinityConfig testConfig =
+            new com.faster.affinity.config.AffinityConfig.Builder()
+                .testMode(true)  // Disable rate limiting for tests
+                .enablePerformanceCounters(true)
+                .enableCaching(true)
+                .validateParameters(true)
+                .build();
+
+        this.affinityLib = AffinityLibraryFactory.create(testConfig);
 
         if (!affinityLib.isInitialized()) {
             throw new IllegalStateException("Affinity library failed to initialize");

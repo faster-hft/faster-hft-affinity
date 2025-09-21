@@ -22,6 +22,7 @@ class CrossPlatformIntegrationTest {
     @BeforeAll
     void setUp() throws Exception {
         config = new AffinityConfig.Builder()
+            .testMode(true) // Disable rate limiting for high-frequency tests
             .enablePerformanceCounters(true)
             .enableNumaOperations(true)
             .enableIRQManagement(true)

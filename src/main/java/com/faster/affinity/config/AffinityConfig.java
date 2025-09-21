@@ -43,6 +43,9 @@ public final class AffinityConfig {
     private static final long DEFAULT_MAX_OPERATIONS_PER_SECOND = 1000; // 1000 ops/sec per thread
     private static final long DEFAULT_MAX_BURST_OPERATIONS = 100;       // 100 burst operations
     private static final boolean DEFAULT_ENABLE_RATE_LIMITING = true;
+
+    // Test mode configuration (disables rate limiting for high-frequency tests)
+    private static final boolean DEFAULT_TEST_MODE = false;
     private static final boolean DEFAULT_AUTO_CONFIGURE_HUGEPAGES = false;
     private static final boolean DEFAULT_RESTORE_HUGEPAGE_SETTINGS_ON_SHUTDOWN = true;
 
@@ -93,6 +96,9 @@ public final class AffinityConfig {
     private final long maxOperationsPerSecond;
     private final long maxBurstOperations;
 
+    // Test mode fields (disables rate limiting for high-frequency tests)
+    private final boolean testMode;
+
     private AffinityConfig(Builder builder) {
         this.enablePerformanceCounters = builder.enablePerformanceCounters;
         this.enableRealtimeFeatures = builder.enableRealtimeFeatures;
@@ -128,6 +134,9 @@ public final class AffinityConfig {
         this.enableRateLimiting = builder.enableRateLimiting;
         this.maxOperationsPerSecond = builder.maxOperationsPerSecond;
         this.maxBurstOperations = builder.maxBurstOperations;
+
+        // Test mode initialization (disables rate limiting for high-frequency tests)
+        this.testMode = builder.testMode;
 
         if (developerMode) {
             logger.info("AffinityConfig initialized in developer mode: {}", this);
@@ -272,6 +281,9 @@ public final class AffinityConfig {
     public long getMaxOperationsPerSecond() { return maxOperationsPerSecond; }
     public long getMaxBurstOperations() { return maxBurstOperations; }
 
+    // Test mode getters
+    public boolean isTestMode() { return testMode; }
+
     // Validation methods
     public void validateConfiguration() {
         if (maxRetryAttempts < 0 || maxRetryAttempts > 10) {
@@ -346,6 +358,9 @@ public final class AffinityConfig {
         private boolean enableRateLimiting = DEFAULT_ENABLE_RATE_LIMITING;
         private long maxOperationsPerSecond = DEFAULT_MAX_OPERATIONS_PER_SECOND;
         private long maxBurstOperations = DEFAULT_MAX_BURST_OPERATIONS;
+
+        // Test mode builder fields
+        private boolean testMode = DEFAULT_TEST_MODE;
 
         public Builder enablePerformanceCounters(boolean enable) {
             this.enablePerformanceCounters = enable;
@@ -493,6 +508,11 @@ public final class AffinityConfig {
                 throw new IllegalArgumentException("Max burst operations must be positive");
             }
             this.maxBurstOperations = maxBurst;
+            return this;
+        }
+
+        public Builder testMode(boolean testMode) {
+            this.testMode = testMode;
             return this;
         }
 

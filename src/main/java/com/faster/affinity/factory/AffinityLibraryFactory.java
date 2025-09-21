@@ -48,6 +48,10 @@ public final class AffinityLibraryFactory {
      */
     public static AffinityLibrary create(AffinityConfig config) {
         try {
+            // If in test mode and ThreadLocal shutdown was initiated, reset it for test isolation
+            if (config.isTestMode()) {
+                com.faster.affinity.utils.ThreadLocalManager.resetForTesting();
+            }
             return new AffinityLibraryImpl(config);
         } catch (Exception e) {
             logger.error("Failed to create affinity library: {}", e.getMessage(), e);

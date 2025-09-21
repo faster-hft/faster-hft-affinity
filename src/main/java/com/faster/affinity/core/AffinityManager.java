@@ -568,8 +568,8 @@ public final class AffinityManager {
     @HotPath("Standard thread affinity setting operation")
     public OperationResult<Void> setThreadAffinity(long threadId, BitSet cpuMask) {
         return executeWithRetry("setThreadAffinity", () -> {
-            // Rate limiting check for DoS protection
-            if (config.isRateLimitingEnabled() && !rateLimiter.tryAcquire()) {
+            // Rate limiting check for DoS protection (disabled in test mode for high-frequency tests)
+            if (config.isRateLimitingEnabled() && !config.isTestMode() && !rateLimiter.tryAcquire()) {
                 AuditLogger.logRateLimitViolation("setThreadAffinity", threadId,
                     "Max operations per second: " + config.getMaxOperationsPerSecond());
                 throw new SecurityException("Rate limit exceeded for setThreadAffinity operation. Thread: " +
@@ -615,8 +615,8 @@ public final class AffinityManager {
     @HotPath("Standard thread affinity query operation")
     public OperationResult<BitSet> getThreadAffinity(long threadId) {
         return executeWithRetry("getThreadAffinity", () -> {
-            // Rate limiting check for DoS protection
-            if (config.isRateLimitingEnabled() && !rateLimiter.tryAcquire()) {
+            // Rate limiting check for DoS protection (disabled in test mode for high-frequency tests)
+            if (config.isRateLimitingEnabled() && !config.isTestMode() && !rateLimiter.tryAcquire()) {
                 AuditLogger.logRateLimitViolation("getThreadAffinity", threadId,
                     "Max operations per second: " + config.getMaxOperationsPerSecond());
                 throw new SecurityException("Rate limit exceeded for getThreadAffinity operation. Thread: " +

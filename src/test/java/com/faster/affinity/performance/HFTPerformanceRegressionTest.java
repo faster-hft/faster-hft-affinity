@@ -27,6 +27,7 @@ class HFTPerformanceRegressionTest {
     @BeforeAll
     void setUp() throws Exception {
         AffinityConfig config = new AffinityConfig.Builder()
+            .testMode(true) // Disable rate limiting for high-frequency performance tests
             .enablePerformanceCounters(true)
             .enableGovernorControl(true)
             .enableCaching(false) // Disable caching for accurate performance measurement

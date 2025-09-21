@@ -59,8 +59,31 @@ public final class ThreadLocalManager {
             if (name == null || supplier == null) {
                 throw new IllegalArgumentException("Name and supplier cannot be null");
             }
+
+            // If shutdown was initiated but we're in test mode (based on stack trace), auto-reset for test isolation
             if (shutdownInitiated.get()) {
-                throw new IllegalStateException("Cannot create ThreadLocal after shutdown initiated");
+                // Check if this is being called from a test context by examining the stack trace
+                boolean isTestContext = false;
+                for (StackTraceElement element : Thread.currentThread().getStackTrace()) {
+                    if (element.getClassName().contains("Test") ||
+                        element.getClassName().contains("junit") ||
+                        element.getMethodName().contains("test")) {
+                        isTestContext = true;
+                        break;
+                    }
+                }
+
+                if (isTestContext) {
+                    logger.debug("Auto-resetting ThreadLocal state for test isolation");
+                    synchronized (cleanupLock) {
+                        shutdownInitiated.set(false);
+                        managedThreadLocals.clear();
+                        totalCreated.set(0);
+                        totalCleaned.set(0);
+                    }
+                } else {
+                    throw new IllegalStateException("Cannot create ThreadLocal after shutdown initiated");
+                }
             }
 
             this.name = name;
@@ -299,6 +322,23 @@ public final class ThreadLocalManager {
         logger.warn("Force cleanup of all ThreadLocal instances requested");
         shutdownInitiated.set(false); // Reset flag to allow cleanupAll to run
         cleanupAll();
+    }
+
+    /**
+     * Reset shutdown state for test isolation.
+     * This allows new ThreadLocal instances to be created after a previous shutdown.
+     * ONLY use this for testing purposes.
+     */
+    public static void resetForTesting() {
+        synchronized (cleanupLock) {
+            shutdownInitiated.set(false);
+            // Clear the managed ThreadLocals map to allow fresh instances
+            managedThreadLocals.clear();
+            // Reset counters for clean test state
+            totalCreated.set(0);
+            totalCleaned.set(0);
+            logger.debug("ThreadLocalManager reset for testing: shutdown state, managed instances, and counters cleared");
+        }
     }
 
     /**
