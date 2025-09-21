@@ -373,7 +373,7 @@ gcloud services enable cloudbuild.googleapis.com
 ```bash
 # Check current permissions
 gcloud auth list
-gcloud projects get-iam-policy PROJECT_ID
+gcloud projects get-iam-policy YOUR_PROJECT_ID
 
 # Required roles: Compute Admin, Service Account User
 ```
