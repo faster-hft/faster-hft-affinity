@@ -238,10 +238,103 @@ CPU Package
 ```
 
 #### **Memory Bandwidth Optimization**
-- **Interleaving**: Spread data across channels for maximum bandwidth
-- **Population**: Fill all channels for optimal throughput
-- **Speed Matching**: Ensure all DIMMs run at same speed
-- **Capacity Balancing**: Equal capacity per channel
+
+Memory bandwidth is critical for HFT applications that process large volumes of market data. Understanding how to optimize memory subsystem configuration can provide significant performance benefits:
+
+**Interleaving - Maximizing Parallel Access**:
+
+Memory interleaving spreads consecutive memory addresses across multiple memory channels, allowing parallel access to different parts of your data:
+
+```cpp
+// Example: How interleaving affects HFT market data processing
+struct MarketData {
+    double price;     // Address 0x1000 -> Channel 0
+    double volume;    // Address 0x1008 -> Channel 1
+    double bid;       // Address 0x1010 -> Channel 2
+    double ask;       // Address 0x1018 -> Channel 3
+};
+
+// With 4-channel interleaving, accessing all fields happens in parallel
+// Without interleaving, all accesses would serialize on one channel
+```
+
+**Performance Impact**: Proper interleaving can increase effective bandwidth from ~25 GB/s (single channel) to ~100 GB/s (4-channel) for streaming workloads.
+
+**Population - Filling All Channels**:
+
+Memory controllers achieve maximum bandwidth only when all channels are populated with DIMMs:
+
+```
+Single Channel (Suboptimal):     Multi-Channel (Optimal):
+┌─────────────────┐             ┌─────────────────┐
+│ Memory Controller            │ Memory Controller│
+├─────────────────┤             ├─────────────────┤
+│ Channel 0: 32GB │             │ Channel 0: 32GB │
+│ Channel 1: Empty│ 25 GB/s     │ Channel 1: 32GB │ 100 GB/s
+│ Channel 2: Empty│             │ Channel 2: 32GB │
+│ Channel 3: Empty│             │ Channel 3: 32GB │
+└─────────────────┘             └─────────────────┘
+```
+
+**HFT Best Practice**: Always populate all available channels, even if you don't need the full capacity immediately. The bandwidth improvement is more valuable than the memory cost.
+
+**Speed Matching - Avoiding Bottlenecks**:
+
+Memory operates at the speed of the slowest DIMM in the system. Mixing different speeds creates performance bottlenecks:
+
+```
+Mixed Speed Configuration (Bad):
+Channel 0: DDR4-3200 (25.6 GB/s potential)
+Channel 1: DDR4-2400 (19.2 GB/s potential)
+Actual Performance: DDR4-2400 across all channels (19.2 GB/s total)
+
+Matched Speed Configuration (Good):
+Channel 0: DDR4-3200 (25.6 GB/s)
+Channel 1: DDR4-3200 (25.6 GB/s)
+Actual Performance: DDR4-3200 across all channels (51.2 GB/s total)
+```
+
+**Capacity Balancing - Equal Distribution**:
+
+Unbalanced channel capacities can cause performance issues and limit interleaving effectiveness:
+
+```bash
+# Suboptimal: Unbalanced channels
+Channel 0: 32GB
+Channel 1: 16GB  # Smaller capacity limits interleaving range
+Channel 2: 32GB
+Channel 3: 32GB
+
+# Optimal: Balanced channels
+Channel 0: 32GB
+Channel 1: 32GB
+Channel 2: 32GB
+Channel 3: 32GB
+```
+
+**Real-World HFT Example**:
+```cpp
+// Market data processor with optimized memory layout
+class OptimizedMarketDataProcessor {
+    // Align to maximize memory bandwidth utilization
+    alignas(64) struct alignas(64) SymbolData {
+        double prices[8];     // 64 bytes = 1 cache line
+        char padding[0];      // No padding needed, perfect fit
+    };
+
+    // Array designed for optimal channel utilization
+    SymbolData* symbols_;  // Allocated to span all memory channels
+
+public:
+    void processMarketUpdate() {
+        // Sequential access pattern optimized for interleaving
+        for (int i = 0; i < symbol_count_; i++) {
+            // Each symbol's data likely on different channel
+            updatePrices(symbols_[i]);  // Parallel memory access
+        }
+    }
+};
+```
 
 ### NUMA Distance Matrix
 
@@ -354,19 +447,57 @@ amplxe-cl -collect memory-access ./hft_app
 #### **Memory Ordering Models**
 
 **x86_64 (TSO - Total Store Order)**:
-- Stores are globally ordered
-- Loads can be reordered with older stores
-- Relatively strong ordering
+
+Intel and AMD x86_64 processors use Total Store Order, which provides relatively strong memory ordering guarantees:
+
+- **Store Ordering**: All stores appear in the same order to all processors. If CPU A writes to memory location X then Y, all other CPUs will observe these writes in the same order.
+- **Load-Store Reordering**: Loads can be reordered to occur before earlier stores, but only if they access different memory locations. This allows out-of-order execution while maintaining correctness.
+- **Store Buffer**: Each CPU has a store buffer that can delay stores to memory. This means a store might not be immediately visible to other CPUs.
+
+```cpp
+// Example: What x86_64 TSO guarantees
+CPU 0:              CPU 1:
+store [A] = 1       while ([B] == 0) ;  // Wait for B to be set
+store [B] = 1       load r1 = [A]       // Will always see A = 1
+```
+
+**HFT Implications**: TSO makes it relatively easy to write correct lock-free code, but you still need memory barriers for specific ordering requirements.
 
 **ARM64 (Weak Ordering)**:
-- Extensive reordering allowed
-- Requires explicit barriers
-- Better performance but more complex
+
+ARM64 processors use a much weaker memory model that allows extensive reordering for performance:
+
+- **Extensive Reordering**: Both loads and stores can be reordered aggressively unless prevented by explicit barriers.
+- **Speculative Execution**: The processor can execute loads speculatively and might see stale data that gets corrected later.
+- **Conditional Memory Model**: The ordering depends on address dependencies and control dependencies.
+
+```cpp
+// Example: ARM64 reordering behavior
+CPU 0:              CPU 1:
+store [A] = 1       load r1 = [B]       // Might see B = 1
+store [B] = 1       load r2 = [A]       // But A = 0 (reordered!)
+                    // This is legal on ARM64 without barriers
+```
+
+**HFT Implications**: ARM64 can achieve higher performance due to aggressive reordering, but requires careful barrier placement. All shared data structures need explicit synchronization.
 
 **POWER (Weak Ordering)**:
-- Very weak ordering model
-- Requires careful barrier placement
-- Highest performance potential
+
+IBM POWER processors have the weakest memory model, allowing maximum performance through aggressive reordering:
+
+- **Complete Reordering Freedom**: Loads and stores can be reordered freely unless constrained by dependencies or barriers.
+- **Coherence vs Consistency**: Cache coherence (single location) is maintained, but consistency (multiple locations) requires explicit synchronization.
+- **Performance Benefits**: This weakness allows for very high performance when properly used.
+
+```cpp
+// Example: POWER extreme reordering
+Thread 1:           Thread 2:           Thread 3:
+store [A] = 1       load r1 = [A]       load r3 = [B]
+store [B] = 1       load r2 = [B]       load r4 = [A]
+                    // r1=1, r2=0 possible    // r3=1, r4=0 possible
+```
+
+**HFT Implications**: POWER can achieve the highest performance for well-designed HFT systems, but requires expert-level understanding of memory ordering and extensive use of barriers.
 
 #### **Memory Barriers for HFT**
 ```cpp
@@ -819,9 +950,118 @@ mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_HUGETLB, -1, 0);
 ```
 
 **Benefits of Large Pages**:
-- Reduces TLB pressure (fewer entries needed)
-- Eliminates page table walks for large allocations
-- Guaranteed physical memory (no swapping)
+
+Large pages (also called huge pages or superpages) provide significant performance benefits for HFT applications by reducing memory management overhead:
+
+**Reduces TLB Pressure (Translation Lookaside Buffer)**:
+
+The TLB is a small cache that stores virtual-to-physical address translations. With standard 4KB pages, large memory allocations require many TLB entries:
+
+```
+Standard 4KB Pages:
+1GB allocation = 262,144 pages = 262,144 TLB entries needed
+Typical TLB size: 64-512 entries
+Result: Constant TLB misses and page table walks
+
+2MB Large Pages:
+1GB allocation = 512 pages = 512 TLB entries needed
+Result: All translations fit in TLB, no page table walks
+```
+
+**Performance Impact**: TLB misses can cost 100-300 CPU cycles. Eliminating them provides consistent low-latency memory access.
+
+**Eliminates Page Table Walks**:
+
+When the TLB misses, the CPU must walk the page table structure to find the physical address. This is expensive:
+
+```cpp
+// Example: Impact on HFT order processing
+class OrderProcessor {
+    Order* orders_;  // Large array allocated with huge pages
+
+public:
+    void processOrder(int index) {
+        // With 4KB pages: potential TLB miss + page table walk (100+ cycles)
+        // With 2MB pages: TLB hit (0 cycles overhead)
+        Order& order = orders_[index];
+
+        // Critical path processing benefits from zero translation overhead
+        validateOrder(order);
+        submitOrder(order);
+    }
+};
+```
+
+**Page Table Walk Cost**:
+- L1 TLB miss: 10-20 cycles
+- L2 TLB miss: 100-300 cycles
+- Full page table walk: 200-500 cycles
+
+**Guaranteed Physical Memory (No Swapping)**:
+
+Large pages are typically not swappable, ensuring your critical HFT data stays in physical memory:
+
+```bash
+# Standard pages can be swapped to disk
+echo 3 > /proc/sys/vm/drop_caches  # May cause paging
+
+# Large pages remain in physical memory
+cat /proc/meminfo | grep -i huge
+HugePages_Total:    1024    # Always resident
+HugePages_Free:      512    # Never swapped
+```
+
+**HFT Implications**:
+- **Latency Predictability**: No surprise page faults from swap
+- **Performance Consistency**: Memory access latency remains constant
+- **Resource Guarantee**: Critical data always available in RAM
+
+**Configuration Example**:
+```bash
+# Allocate 1GB of 2MB huge pages
+echo 512 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+
+# Verify allocation
+cat /proc/meminfo | grep -i huge
+HugePages_Total:     512
+HugePages_Free:      512
+HugePages_Rsvd:        0
+HugePages_Surp:        0
+Hugepagesize:       2048 kB
+```
+
+**Application Usage**:
+```cpp
+// Allocate memory using huge pages
+void* allocateHugePages(size_t size) {
+    void* ptr = mmap(nullptr, size,
+                     PROT_READ | PROT_WRITE,
+                     MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
+                     -1, 0);
+    if (ptr == MAP_FAILED) {
+        throw std::runtime_error("Failed to allocate huge pages");
+    }
+    return ptr;
+}
+
+// Example: Market data buffer with huge pages
+class MarketDataBuffer {
+    static constexpr size_t BUFFER_SIZE = 1024 * 1024 * 1024;  // 1GB
+    void* buffer_;
+
+public:
+    MarketDataBuffer() {
+        // Allocate with 2MB pages for optimal TLB utilization
+        buffer_ = allocateHugePages(BUFFER_SIZE);
+    }
+
+    // Fast, predictable memory access
+    void storeMarketData(const MarketUpdate& update, size_t offset) {
+        // Zero TLB miss overhead due to huge pages
+        memcpy(static_cast<char*>(buffer_) + offset, &update, sizeof(update));
+    }
+};
+```
 
 #### **Memory Layout Optimization**
 ```cpp
@@ -963,6 +1203,8 @@ perf stat -e memory-loads,memory-stores ./hft_app
 
 #### **Intel vs AMD vs ARM Performance Characteristics**
 
+Understanding the architectural differences between major CPU vendors is crucial for HFT system design. Each architecture has unique strengths that affect trading system performance:
+
 | Feature | Intel Xeon | AMD EPYC | ARM (Graviton) |
 |---------|------------|----------|----------------|
 | **Memory Latency** | ~80ns | ~90ns | ~85ns |
@@ -972,6 +1214,158 @@ perf stat -e memory-loads,memory-stores ./hft_app
 | **NUMA Scaling** | Good | Excellent | Good |
 | **Single Thread** | Excellent | Very Good | Good |
 | **Power Efficiency** | Moderate | Good | Excellent |
+
+**Intel Xeon - Single Thread Performance Leader**:
+
+Intel Xeon processors excel in single-threaded performance, making them ideal for latency-critical HFT applications:
+
+- **Architecture Strengths**:
+  - Highest IPC (Instructions Per Cycle) for single threads
+  - Excellent branch prediction and speculative execution
+  - Mature compiler optimizations and toolchain support
+  - Advanced instruction sets (AVX-512) for vectorized operations
+
+- **Memory Subsystem**:
+  - Ring bus or mesh interconnect for cache coherency
+  - Lower memory latency than AMD (typically 10-15ns advantage)
+  - Predictable NUMA topology with clear node boundaries
+
+- **HFT Implications**:
+  - Best choice for single-threaded order processing engines
+  - Optimal for low-latency market data processing
+  - Premium pricing but justified for critical path applications
+
+```cpp
+// Example: Intel-optimized order processing
+class IntelOptimizedOrderProcessor {
+    // Leverage Intel's strong single-thread performance
+    void processOrder(const Order& order) {
+        // Intel's branch predictor excels with consistent patterns
+        if (likely(order.isValid())) {  // Branch hint for Intel
+            // Fast single-threaded execution path
+            executeOrder(order);
+        }
+    }
+
+    // Use Intel-specific vectorization
+    void processBatchPrices(double* prices, int count) {
+        #ifdef __AVX512F__
+        for (int i = 0; i < count; i += 8) {
+            __m512d v = _mm512_load_pd(&prices[i]);
+            v = _mm512_mul_pd(v, _mm512_set1_pd(1.001));  // Apply spread
+            _mm512_store_pd(&prices[i], v);
+        }
+        #endif
+    }
+};
+```
+
+**AMD EPYC - NUMA and Parallel Processing Champion**:
+
+AMD EPYC processors provide excellent value for multi-threaded and NUMA-aware HFT applications:
+
+- **Architecture Strengths**:
+  - Superior NUMA scaling with Infinity Fabric
+  - Higher core counts at competitive pricing
+  - Excellent memory bandwidth with more channels
+  - Strong floating-point performance for calculations
+
+- **Infinity Fabric**:
+  - Advanced cache coherency and memory management
+  - Better scaling across multiple NUMA nodes
+  - Lower inter-socket communication latency
+
+- **HFT Implications**:
+  - Excellent for risk management systems with many calculations
+  - Ideal for multi-symbol market data processing
+  - Cost-effective for non-critical path applications
+
+```cpp
+// Example: AMD EPYC NUMA-optimized design
+class EPYCOptimizedRiskEngine {
+    // Leverage AMD's excellent NUMA scaling
+    void distributeRiskCalculations() {
+        int numa_nodes = numa_max_node() + 1;
+
+        // AMD EPYC excels with NUMA-aware parallel processing
+        for (int node = 0; node < numa_nodes; node++) {
+            // Bind calculation threads to specific NUMA nodes
+            std::thread risk_thread([this, node]() {
+                // AMD's Infinity Fabric provides efficient inter-node communication
+                numa_run_on_node(node);
+                calculateRiskForNode(node);
+            });
+            risk_thread.detach();
+        }
+    }
+
+    // Take advantage of AMD's high core counts
+    void parallelPortfolioAnalysis(const Portfolio& portfolio) {
+        std::vector<std::future<RiskMetrics>> futures;
+
+        // AMD EPYC can efficiently handle many parallel tasks
+        for (const auto& symbol : portfolio.symbols) {
+            futures.emplace_back(std::async(std::launch::async,
+                [this, symbol]() { return calculateSymbolRisk(symbol); }));
+        }
+    }
+};
+```
+
+**ARM (Graviton) - Power Efficiency and Cloud Optimization**:
+
+ARM processors offer compelling power efficiency for cloud-based HFT infrastructure:
+
+- **Architecture Strengths**:
+  - Best power efficiency in the market
+  - Competitive performance per dollar in cloud environments
+  - Clean, simple instruction set architecture
+  - Excellent for containerized microservices
+
+- **Memory Model**:
+  - Weak memory ordering requires careful barrier placement
+  - Good NUMA scaling but simpler topology than x86
+  - Predictable latency characteristics
+
+- **HFT Implications**:
+  - Ideal for cloud-based trading infrastructure
+  - Excellent for monitoring and analytics systems
+  - Requires expertise in weak memory ordering
+
+```cpp
+// Example: ARM-optimized design with proper memory barriers
+class ARMOptimizedMarketData {
+    volatile bool data_ready = false;
+    MarketUpdate latest_update;
+
+public:
+    void publishUpdate(const MarketUpdate& update) {
+        latest_update = update;
+
+        // ARM requires explicit memory barriers
+        #ifdef __aarch64__
+        __asm__ __volatile__("dsb sy" ::: "memory");  // Data synchronization barrier
+        #endif
+
+        data_ready = true;
+
+        #ifdef __aarch64__
+        __asm__ __volatile__("dsb sy" ::: "memory");  // Ensure ordering
+        #endif
+    }
+
+    bool consumeUpdate(MarketUpdate& update) {
+        if (!data_ready) return false;
+
+        #ifdef __aarch64__
+        __asm__ __volatile__("dsb sy" ::: "memory");  // Load barrier
+        #endif
+
+        update = latest_update;
+        return true;
+    }
+};
+```
 
 #### **Architecture-Specific Optimizations**
 
