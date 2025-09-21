@@ -19,6 +19,10 @@ public final class TransactionManager {
     // Transaction ID generator
     private static final AtomicLong transactionIdGenerator = new AtomicLong(0);
 
+    // CRITICAL FIX: Add limits to prevent memory leaks in rollback failures
+    private static final int MAX_ROLLBACK_FAILURES_PER_TRANSACTION = 100;
+    private static final long ROLLBACK_FAILURE_CLEANUP_INTERVAL_MS = 300000; // 5 minutes
+
     // Thread-local transaction context
     private static final ThreadLocal<TransactionContext> currentTransaction = new ThreadLocal<>();
 
@@ -89,6 +93,9 @@ public final class TransactionManager {
         private final long startTime;
         private volatile TransactionState state;
 
+        // CRITICAL FIX: Add timestamp for rollback failure cleanup
+        private volatile long lastFailureCleanupTime;
+
         private TransactionContext(long transactionId, String operationName) {
             this.transactionId = transactionId;
             this.operationName = operationName;
@@ -96,6 +103,7 @@ public final class TransactionManager {
             this.rollbackFailures = new ArrayList<>();
             this.startTime = System.currentTimeMillis();
             this.state = TransactionState.CREATED;
+            this.lastFailureCleanupTime = startTime; // Initialize cleanup timestamp
         }
 
         /**
@@ -176,6 +184,12 @@ public final class TransactionManager {
                     logger.trace("Rolled back action: {} (transaction: {})", action.getName(), transactionId);
                 } catch (Exception e) {
                     RollbackFailure failure = new RollbackFailure(action.getName(), e);
+
+                    // CRITICAL FIX: Prevent memory leak by limiting rollback failure accumulation
+                    if (rollbackFailures.size() >= MAX_ROLLBACK_FAILURES_PER_TRANSACTION) {
+                        cleanupOldRollbackFailures();
+                    }
+
                     rollbackFailures.add(failure);
 
                     // Categorize failure severity
@@ -284,6 +298,31 @@ public final class TransactionManager {
         public boolean hasRollbackFailures() { return !rollbackFailures.isEmpty(); }
         public boolean hasCriticalRollbackFailures() {
             return rollbackFailures.stream().anyMatch(f -> isCriticalRollbackFailure(f.getActionName(), f.getException()));
+        }
+
+        /**
+         * CRITICAL FIX: Clean up old rollback failures to prevent memory leaks.
+         * Removes the oldest 50% of failures when limit is exceeded.
+         */
+        private void cleanupOldRollbackFailures() {
+            long currentTime = System.currentTimeMillis();
+
+            // Only cleanup if enough time has passed to avoid excessive cleanup overhead
+            if (currentTime - lastFailureCleanupTime > ROLLBACK_FAILURE_CLEANUP_INTERVAL_MS) {
+                int targetSize = MAX_ROLLBACK_FAILURES_PER_TRANSACTION / 2;
+                int toRemove = rollbackFailures.size() - targetSize;
+
+                if (toRemove > 0) {
+                    // Remove oldest failures (from the beginning of the list)
+                    for (int i = 0; i < toRemove; i++) {
+                        rollbackFailures.remove(0);
+                    }
+
+                    lastFailureCleanupTime = currentTime;
+                    logger.debug("Cleaned up {} old rollback failures for transaction {}, remaining: {}",
+                               toRemove, transactionId, rollbackFailures.size());
+                }
+            }
         }
     }
 

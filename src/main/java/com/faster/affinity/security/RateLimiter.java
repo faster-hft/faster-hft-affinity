@@ -94,24 +94,41 @@ public final class RateLimiter {
             if (now > lastRefill) {
                 long elapsedMs = now - lastRefill;
 
-                // Prevent overflow in multiplication with safety checks
+                // CRITICAL FIX: Comprehensive overflow protection using safe arithmetic
                 long tokensToAdd = 0;
                 if (elapsedMs > 0 && refillRate > 0 && refillIntervalMs > 0) {
-                    // Check for potential overflow before multiplication
-                    if (elapsedMs <= Long.MAX_VALUE / refillRate) {
-                        tokensToAdd = (elapsedMs * refillRate) / refillIntervalMs;
-                    } else {
-                        // Use safer calculation for large values
-                        tokensToAdd = (elapsedMs / refillIntervalMs) * refillRate;
-                        // Add remainder calculation if needed
-                        long remainder = elapsedMs % refillIntervalMs;
-                        if (remainder > 0 && remainder <= Long.MAX_VALUE / refillRate) {
-                            tokensToAdd += (remainder * refillRate) / refillIntervalMs;
+                    try {
+                        // CRITICAL FIX: Use Math.multiplyExact to detect overflow
+                        long product = Math.multiplyExact(elapsedMs, refillRate);
+                        tokensToAdd = product / refillIntervalMs;
+                    } catch (ArithmeticException overflowException) {
+                        // CRITICAL FIX: Handle overflow by using safe division-first approach
+                        try {
+                            long wholeIntervals = elapsedMs / refillIntervalMs;
+                            long remainderMs = elapsedMs % refillIntervalMs;
+
+                            // Calculate tokens for whole intervals safely
+                            tokensToAdd = Math.multiplyExact(wholeIntervals, refillRate);
+
+                            // Add tokens for remainder if any
+                            if (remainderMs > 0) {
+                                long remainderTokens = Math.multiplyExact(remainderMs, refillRate) / refillIntervalMs;
+                                tokensToAdd = Math.addExact(tokensToAdd, remainderTokens);
+                            }
+                        } catch (ArithmeticException secondOverflow) {
+                            // CRITICAL FIX: Even safe calculation overflowed - use maximum capacity
+                            logger.warn("Token calculation overflow detected for elapsed time {}ms, using capacity limit", elapsedMs);
+                            tokensToAdd = capacity;
                         }
                     }
 
-                    // Cap to reasonable maximum to prevent resource exhaustion
-                    tokensToAdd = Math.min(tokensToAdd, capacity * 2);
+                    // CRITICAL FIX: Additional safety caps with overflow protection
+                    try {
+                        long maxAllowed = Math.multiplyExact(capacity, 2L);
+                        tokensToAdd = Math.min(tokensToAdd, maxAllowed);
+                    } catch (ArithmeticException e) {
+                        tokensToAdd = Math.min(tokensToAdd, capacity);
+                    }
                 }
 
                 if (tokensToAdd > 0 && lastRefillTime.compareAndSet(lastRefill, now)) {
@@ -172,7 +189,19 @@ public final class RateLimiter {
         this.windowSizeMs = windowSizeMs;
 
         // Global bucket for system-wide rate limiting (10x per-thread limit)
-        this.globalBucket = new TokenBucket(burstCapacity * 10, tokensPerSecond * 10);
+        // CRITICAL FIX: Prevent overflow in global bucket initialization
+        long globalBurstCapacity, globalTokensPerSecond;
+        try {
+            globalBurstCapacity = Math.multiplyExact(burstCapacity, 10L);
+            globalTokensPerSecond = Math.multiplyExact(tokensPerSecond, 10L);
+        } catch (ArithmeticException e) {
+            // Handle overflow by capping at maximum safe values
+            globalBurstCapacity = Math.min(burstCapacity, Long.MAX_VALUE / 10) * 10;
+            globalTokensPerSecond = Math.min(tokensPerSecond, Long.MAX_VALUE / 10) * 10;
+            logger.warn("Rate limiter parameters caused overflow, using capped values: burst={}, tokens/sec={}",
+                       globalBurstCapacity, globalTokensPerSecond);
+        }
+        this.globalBucket = new TokenBucket(globalBurstCapacity, globalTokensPerSecond);
 
         logger.info("RateLimiter initialized: {} tokens/sec, {} burst capacity, {} ms window",
                    tokensPerSecond, burstCapacity, windowSizeMs);

@@ -104,28 +104,97 @@ public final class InputValidator {
 
     /**
      * Check thread ownership on Linux by examining /proc filesystem.
+     * CRITICAL FIX: Enhanced validation to prevent privilege escalation.
      */
     private static boolean checkLinuxThreadOwnership(long threadId, long processId) {
         try {
-            // Check if thread exists in current process's task directory
+            // CRITICAL FIX: Multiple validation checks for thread ownership
+
+            // 1. Check if thread exists in current process's task directory
             java.nio.file.Path threadPath = java.nio.file.Paths.get("/proc", String.valueOf(processId), "task", String.valueOf(threadId));
-            return java.nio.file.Files.exists(threadPath);
+            if (!java.nio.file.Files.exists(threadPath)) {
+                return false;
+            }
+
+            // 2. CRITICAL FIX: Verify thread actually belongs to our process by reading its status
+            java.nio.file.Path statusPath = threadPath.resolve("status");
+            if (java.nio.file.Files.exists(statusPath)) {
+                java.util.List<String> lines = java.nio.file.Files.readAllLines(statusPath);
+                boolean processIdMatches = false;
+
+                for (String line : lines) {
+                    if (line.startsWith("Tgid:")) {
+                        String[] parts = line.split("\\s+");
+                        if (parts.length >= 2) {
+                            long tgid = Long.parseLong(parts[1]);
+                            processIdMatches = (tgid == processId);
+                            break;
+                        }
+                    }
+                }
+
+                if (!processIdMatches) {
+                    return false;
+                }
+            }
+
+            // 3. CRITICAL FIX: Additional verification - check if we can actually access the thread
+            java.nio.file.Path commPath = threadPath.resolve("comm");
+            return java.nio.file.Files.isReadable(commPath);
+
         } catch (Exception e) {
+            // CRITICAL FIX: Log security-relevant failures
+            logger.warn("Thread ownership validation failed for thread {} in process {}: {}",
+                       threadId, processId, e.getMessage());
             return false;
         }
     }
 
     /**
-     * Check thread ownership on Windows (simplified check).
+     * Check thread ownership on Windows.
+     * CRITICAL FIX: Enhanced validation to prevent privilege escalation.
      */
     private static boolean checkWindowsThreadOwnership(long threadId, long processId) {
         try {
-            // For Windows, we'll use a more conservative approach and require
-            // that only threads from the current process can be modified
-            // A more sophisticated implementation would use Windows APIs
-            return Thread.currentThread().getId() == threadId ||
-                   threadId > 0; // Allow if it seems like a valid thread ID - Windows check needs native implementation
+            // CRITICAL FIX: Use Java ProcessHandle for more robust validation
+            long currentPid = ProcessHandle.current().pid();
+
+            // 1. Basic validation: only allow threads from current process
+            if (processId != currentPid) {
+                logger.warn("Thread {} belongs to different process {} (current: {})",
+                           threadId, processId, currentPid);
+                return false;
+            }
+
+            // 2. CRITICAL FIX: Additional verification using Java thread management
+            // For threads in current process, verify they are accessible
+            if (threadId == Thread.currentThread().getId()) {
+                return true; // Always allow current thread
+            }
+
+            // 3. CRITICAL FIX: For other threads, use conservative validation
+            // In a production environment, this should use native Windows APIs
+            // to properly validate thread ownership and access rights
+
+            // Check if thread ID is in reasonable range
+            if (threadId <= 0 || threadId > Integer.MAX_VALUE) {
+                logger.warn("Invalid thread ID range: {}", threadId);
+                return false;
+            }
+
+            // CRITICAL FIX: Conservative approach - require administrative privileges
+            // for threads other than current thread to prevent unauthorized access
+            if (!hasSystemPrivileges()) {
+                logger.warn("Insufficient privileges to access thread {} without system privileges", threadId);
+                return false;
+            }
+
+            return true;
+
         } catch (Exception e) {
+            // CRITICAL FIX: Log security-relevant failures
+            logger.warn("Windows thread ownership validation failed for thread {} in process {}: {}",
+                       threadId, processId, e.getMessage());
             return false;
         }
     }

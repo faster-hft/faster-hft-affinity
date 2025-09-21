@@ -2,7 +2,6 @@ package com.faster.affinity.performance;
 
 import com.faster.affinity.cache.HotPathCache;
 import com.faster.affinity.pool.ObjectPoolManager;
-import jdk.internal.vm.annotation.Contended;
 
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
@@ -10,29 +9,30 @@ import java.util.concurrent.atomic.LongAdder;
 /**
  * Performance profiler specifically designed for HFT optimization monitoring.
  * Tracks latency, throughput, and efficiency metrics for hot path operations.
+ * FIXED: Manual cache line padding replaces @Contended for module compatibility.
  */
-@Contended
 public final class HFTPerformanceProfiler {
     // Logger removed - not used in performance-critical code
 
-    // Operation counters - prevent false sharing with cache line isolation
-    @Contended("counters")
+    // CACHE LINE PADDING: Prevent false sharing with manual 64-byte alignment
+    // Operation counters - isolated to their own cache lines
+    private volatile long pad0, pad1, pad2, pad3, pad4, pad5, pad6, pad7; // 64 bytes
     private final LongAdder hotPathOperations = new LongAdder();
-    @Contended("counters")
+    private volatile long pad8, pad9, pad10, pad11, pad12, pad13, pad14, pad15; // 64 bytes
     private final LongAdder fallbackOperations = new LongAdder();
-    @Contended("counters")
+    private volatile long pad16, pad17, pad18, pad19, pad20, pad21, pad22, pad23; // 64 bytes
     private final LongAdder cacheHits = new LongAdder();
-    @Contended("counters")
+    private volatile long pad24, pad25, pad26, pad27, pad28, pad29, pad30, pad31; // 64 bytes
     private final LongAdder cacheMisses = new LongAdder();
 
-    // Latency tracking (in nanoseconds) - separate cache line group
-    @Contended("latency")
+    // Latency tracking (in nanoseconds) - separate cache line groups
+    private volatile long pad32, pad33, pad34, pad35, pad36, pad37, pad38, pad39; // 64 bytes
     private final AtomicLong totalHotPathLatency = new AtomicLong();
-    @Contended("latency")
+    private volatile long pad40, pad41, pad42, pad43, pad44, pad45, pad46, pad47; // 64 bytes
     private final AtomicLong totalFallbackLatency = new AtomicLong();
-    @Contended("latency")
+    private volatile long pad48, pad49, pad50, pad51, pad52, pad53, pad54, pad55; // 64 bytes
     private final AtomicLong minHotPathLatency = new AtomicLong(Long.MAX_VALUE);
-    @Contended("latency")
+    private volatile long pad56, pad57, pad58, pad59, pad60, pad61, pad62, pad63; // 64 bytes
     private final AtomicLong maxHotPathLatency = new AtomicLong();
 
     // GC pressure indicators
