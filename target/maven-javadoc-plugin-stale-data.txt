@@ -1,0 +1,71 @@
+@options
+@packages
+--add-modules
+ALL-MODULE-PATH
+--module-path
+'C:/Users/amar_/.m2/repository/org/slf4j/slf4j-api/2.0.9/slf4j-api-2.0.9.jar;C:/Users/amar_/.m2/repository/ch/qos/logback/logback-core/1.4.11/logback-core-1.4.11.jar;C:/Users/amar_/.m2/repository/net/java/dev/jna/jna-platform/5.13.0/jna-platform-5.13.0.jar;C:/faster/faster-thread-affinity/target/affinity-library-1.0.0.jar;C:/Users/amar_/.m2/repository/ch/qos/logback/logback-classic/1.4.11/logback-classic-1.4.11.jar;C:/Users/amar_/.m2/repository/net/java/dev/jna/jna/5.13.0/jna-5.13.0.jar'
+--patch-module
+com.hft.systems.affinity='C:/faster/faster-thread-affinity/src/main/java;C:/faster/faster-thread-affinity/target/generated-sources/annotations'
+-encoding
+'UTF-8'
+-protected
+-quiet
+-source
+'11'
+-author
+-bottom
+'Copyright &#169; 2025. All rights reserved.'
+-charset
+'UTF-8'
+-d
+'C:/faster/faster-thread-affinity/target/apidocs'
+-docencoding
+'UTF-8'
+-Xdoclint:none
+-doctitle
+'HFT Affinity Library 1.0.0 API'
+-link
+'https://docs.oracle.com/en/java/javase/11/docs/api'
+-linkoffline
+'https://docs.oracle.com/en/java/javase/11/docs/api' 'C:/faster/faster-thread-affinity/target/javadoc-bundle-options'
+-use
+-version
+-windowtitle
+'HFT Affinity Library 1.0.0 API'
+com.faster.affinity.annotations
+com.faster.affinity.cache
+com.faster.affinity.config
+com.faster.affinity.core
+com.faster.affinity.examples
+com.faster.affinity.exceptions
+com.faster.affinity.factory
+com.faster.affinity.numa
+com.faster.affinity.performance
+com.faster.affinity.platform
+com.faster.affinity.pool
+com.faster.affinity.security
+com.faster.affinity.topology
+com.faster.affinity.transaction
+com.faster.affinity.utils
+com.faster.affinity.validation
+C:\faster\faster-thread-affinity\target\apidocs\allclasses-index.html = 1758429462124
+C:\faster\faster-thread-affinity\target\apidocs\allpackages-index.html = 1758429462124
+C:\faster\faster-thread-affinity\target\apidocs\constant-values.html = 1758429461775
+C:\faster\faster-thread-affinity\target\apidocs\copy.svg = 1758429462187
+C:\faster\faster-thread-affinity\target\apidocs\element-list = 1758429461680
+C:\faster\faster-thread-affinity\target\apidocs\help-doc.html = 1758429462172
+C:\faster\faster-thread-affinity\target\apidocs\index-all.html = 1758429462172
+C:\faster\faster-thread-affinity\target\apidocs\index.html = 1758429462172
+C:\faster\faster-thread-affinity\target\apidocs\link.svg = 1758429462187
+C:\faster\faster-thread-affinity\target\apidocs\member-search-index.js = 1758429462140
+C:\faster\faster-thread-affinity\target\apidocs\module-search-index.js = 1758429462140
+C:\faster\faster-thread-affinity\target\apidocs\overview-tree.html = 1758429462076
+C:\faster\faster-thread-affinity\target\apidocs\package-search-index.js = 1758429462140
+C:\faster\faster-thread-affinity\target\apidocs\script.js = 1758429462187
+C:\faster\faster-thread-affinity\target\apidocs\search-page.js = 1758429462187
+C:\faster\faster-thread-affinity\target\apidocs\search.html = 1758429462172
+C:\faster\faster-thread-affinity\target\apidocs\search.js = 1758429462187
+C:\faster\faster-thread-affinity\target\apidocs\serialized-form.html = 1758429461775
+C:\faster\faster-thread-affinity\target\apidocs\stylesheet.css = 1758429462187
+C:\faster\faster-thread-affinity\target\apidocs\tag-search-index.js = 1758429462140
+C:\faster\faster-thread-affinity\target\apidocs\type-search-index.js = 1758429462140

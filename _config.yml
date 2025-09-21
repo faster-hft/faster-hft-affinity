@@ -1,0 +1,73 @@
+# GitHub Pages Configuration for Faster Thread Affinity Library
+title: "Faster Thread Affinity"
+description: "Ultra-low latency thread affinity library for high-frequency trading applications"
+author: "Amar Mond"
+email: ""
+baseurl: "/faster-thread-affinity"
+url: "https://github.com/faster/faster-thread-affinity"
+
+# Build settings
+markdown: kramdown
+highlighter: rouge
+theme: minima
+
+# Plugins
+plugins:
+  - jekyll-feed
+  - jekyll-sitemap
+  - jekyll-seo-tag
+
+# Navigation
+navigation:
+  - title: "Home"
+    url: "/"
+  - title: "API Documentation"
+    url: "/api/"
+  - title: "HFT Developer Guide"
+    url: "/hft-guide/"
+  - title: "Performance"
+    url: "/performance/"
+  - title: "Examples"
+    url: "/examples/"
+  - title: "GitHub"
+    url: "https://github.com/faster/faster-thread-affinity"
+
+# Collections
+collections:
+  examples:
+    output: true
+    permalink: /:collection/:name/
+
+# Exclude files
+exclude:
+  - vendor/
+  - .bundle/
+  - .sass-cache/
+  - .jekyll-cache/
+  - gemfiles/
+  - Gemfile
+  - Gemfile.lock
+  - node_modules/
+  - vendor/bundle/
+  - vendor/cache/
+  - vendor/gems/
+  - vendor/ruby/
+
+# Markdown settings
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+  syntax_highlighter_opts:
+    block:
+      line_numbers: true
+
+# SEO
+logo: "/assets/img/logo.png"
+social:
+  name: "Amar Mond"
+  links:
+    - "https://github.com/faster/faster-thread-affinity"
+
+# GitHub Pages specific
+github_username: faster
+repository: faster/faster-thread-affinity

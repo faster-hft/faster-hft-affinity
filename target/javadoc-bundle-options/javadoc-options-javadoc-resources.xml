@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<javadocOptions>
+  <docletArtifacts>
+    <docletArtifact />
+  </docletArtifacts>
+  <tagletArtifacts>
+    <tagletArtifact />
+  </tagletArtifacts>
+  <links>
+    <link>https://docs.oracle.com/en/java/javase/11/docs/api/</link>
+  </links>
+  <javadocResourcesDirectory>src/main/javadoc</javadocResourcesDirectory>
+</javadocOptions>
