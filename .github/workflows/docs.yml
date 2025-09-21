@@ -1,0 +1,292 @@
+name: Documentation
+
+on:
+  push:
+    branches: [ main ]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # Build JavaDocs and user documentation
+  build-docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-docs-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-docs-m2
+            ${{ runner.os }}-m2
+
+      - name: Build project
+        run: mvn clean compile -B -q
+
+      - name: Generate JavaDoc
+        run: |
+          echo "Generating JavaDoc..."
+          mvn javadoc:javadoc -B
+
+          # Check if JavaDoc was generated
+          if [[ -d "target/site/apidocs" ]]; then
+            echo "✅ JavaDoc generated successfully"
+            ls -la target/site/apidocs/
+          else
+            echo "❌ JavaDoc generation failed"
+            find target/ -name "*.html" -o -name "apidocs" 2>/dev/null || echo "No HTML files found"
+            exit 1
+          fi
+
+      - name: Generate aggregated JavaDoc
+        run: |
+          echo "Generating aggregated JavaDoc for all modules..."
+          mvn javadoc:aggregate -B
+
+          # Copy to consistent location
+          mkdir -p docs/api
+          if [[ -d "target/site/apidocs" ]]; then
+            cp -r target/site/apidocs/* docs/api/
+            echo "✅ JavaDoc copied to docs/api/"
+          fi
+
+      - name: Create documentation index
+        run: |
+          mkdir -p docs
+          cat > docs/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>HFT Thread Affinity Library - Documentation</title>
+              <style>
+                  body {
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+                      line-height: 1.6;
+                      max-width: 1200px;
+                      margin: 0 auto;
+                      padding: 20px;
+                      background: #fafafa;
+                  }
+                  .header {
+                      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                      color: white;
+                      padding: 2rem;
+                      border-radius: 10px;
+                      margin-bottom: 2rem;
+                      text-align: center;
+                  }
+                  .header h1 { margin: 0; font-size: 2.5rem; }
+                  .header p { margin: 0.5rem 0 0 0; opacity: 0.9; }
+                  .docs-grid {
+                      display: grid;
+                      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                      gap: 2rem;
+                      margin-bottom: 2rem;
+                  }
+                  .doc-card {
+                      background: white;
+                      padding: 1.5rem;
+                      border-radius: 8px;
+                      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                      border-left: 4px solid #667eea;
+                  }
+                  .doc-card h3 { margin-top: 0; color: #333; }
+                  .doc-card a {
+                      color: #667eea;
+                      text-decoration: none;
+                      font-weight: 500;
+                  }
+                  .doc-card a:hover { text-decoration: underline; }
+                  .stats {
+                      background: white;
+                      padding: 1.5rem;
+                      border-radius: 8px;
+                      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                      text-align: center;
+                  }
+                  .badges img { margin: 0 4px; }
+                  .footer {
+                      text-align: center;
+                      margin-top: 2rem;
+                      padding-top: 2rem;
+                      border-top: 1px solid #ddd;
+                      color: #666;
+                  }
+              </style>
+          </head>
+          <body>
+              <div class="header">
+                  <h1>🚀 HFT Thread Affinity Library</h1>
+                  <p>Ultra-low-latency CPU affinity management for high-frequency trading systems</p>
+              </div>
+
+              <div class="stats">
+                  <div class="badges">
+                      <img src="https://github.com/faster-hft/faster-thread-affinity/workflows/Multi-Platform%20Thread%20Affinity%20CI/badge.svg" alt="CI">
+                      <img src="https://github.com/faster-hft/faster-thread-affinity/workflows/Performance%20Testing/badge.svg" alt="Performance">
+                      <img src="https://codecov.io/gh/faster-hft/faster-thread-affinity/branch/main/graph/badge.svg" alt="Coverage">
+                  </div>
+              </div>
+
+              <div class="docs-grid">
+                  <div class="doc-card">
+                      <h3>📖 API Documentation</h3>
+                      <p>Complete JavaDoc API reference with detailed method documentation, examples, and performance notes.</p>
+                      <a href="./api/index.html">Browse JavaDoc →</a>
+                  </div>
+
+                  <div class="doc-card">
+                      <h3>📚 Complete Documentation</h3>
+                      <p>Comprehensive API guide with examples, performance tuning, and platform-specific optimizations.</p>
+                      <a href="https://github.com/faster-hft/faster-thread-affinity/blob/main/DOCUMENTATION.md">Complete Docs →</a>
+                  </div>
+
+                  <div class="doc-card">
+                      <h3>📋 HFT Prerequisites</h3>
+                      <p>Essential knowledge for HFT developers: CPU architecture, NUMA, cache hierarchy, and hardware fundamentals.</p>
+                      <a href="https://github.com/faster-hft/faster-thread-affinity/blob/main/HFT-PREREQUISITES.md">Prerequisites →</a>
+                  </div>
+
+                  <div class="doc-card">
+                      <h3>⚡ HFT Optimization Guide</h3>
+                      <p>Practical strategies for thread patterns, memory management, system tuning, and JVM optimization.</p>
+                      <a href="https://github.com/faster-hft/faster-thread-affinity/blob/main/HFT-OPTIMIZATION-GUIDE.md">Optimization →</a>
+                  </div>
+
+                  <div class="doc-card">
+                      <h3>🔨 HFT Examples</h3>
+                      <p>Real-world implementations: trading systems, order management, market data processing, and risk management.</p>
+                      <a href="https://github.com/faster-hft/faster-thread-affinity/blob/main/HFT-EXAMPLES.md">Examples →</a>
+                  </div>
+
+                  <div class="doc-card">
+                      <h3>🚀 Production Guide</h3>
+                      <p>Enterprise deployment: hardware selection, OS configuration, monitoring, alerting, and troubleshooting.</p>
+                      <a href="https://github.com/faster-hft/faster-thread-affinity/blob/main/PRODUCTION-GUIDE.md">Production →</a>
+                  </div>
+
+                  <div class="doc-card">
+                      <h3>📊 Performance Benchmarks</h3>
+                      <p>Live performance results, latency measurements, and benchmarks across different platforms and architectures.</p>
+                      <a href="https://github.com/faster-hft/faster-thread-affinity/actions/workflows/performance.yml">Benchmarks →</a>
+                  </div>
+
+                  <div class="doc-card">
+                      <h3>🔧 CI/CD Guide</h3>
+                      <p>Multi-platform testing setup across cloud providers and architectures for comprehensive validation.</p>
+                      <a href="https://github.com/faster-hft/faster-thread-affinity/blob/main/CI-CD-GUIDE.md">CI/CD →</a>
+                  </div>
+
+                  <div class="doc-card">
+                      <h3>🧪 Testing Guide</h3>
+                      <p>Testing methodology, validation procedures, and platform-specific considerations for HFT environments.</p>
+                      <a href="https://github.com/faster-hft/faster-thread-affinity/blob/main/TESTING_GUIDE.md">Testing →</a>
+                  </div>
+
+                  <div class="doc-card">
+                      <h3>🔍 Source Code</h3>
+                      <p>Browse the source code, contribute to the project, and report issues on GitHub.</p>
+                      <a href="https://github.com/faster-hft/faster-thread-affinity">GitHub Repository →</a>
+                  </div>
+              </div>
+
+              <div class="footer">
+                  <p>Generated on $(date) | <a href="https://github.com/faster-hft/faster-thread-affinity">faster-hft/faster-thread-affinity</a></p>
+              </div>
+          </body>
+          </html>
+          EOF
+
+          # Replace date placeholder
+          sed -i "s/\$(date)/$(date)/g" docs/index.html
+
+          echo "✅ Documentation index created"
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./docs
+
+      - name: Upload JavaDoc artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: javadoc
+          path: docs/
+          retention-days: 90
+
+  # Deploy to GitHub Pages
+  deploy-docs:
+    name: Deploy Documentation
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build-docs
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  # Documentation health check
+  verify-docs:
+    name: Verify Documentation
+    runs-on: ubuntu-latest
+    needs: deploy-docs
+    steps:
+      - name: Check documentation site
+        run: |
+          echo "🔍 Verifying documentation deployment..."
+
+          # Wait a moment for deployment
+          sleep 30
+
+          # Check if the site is accessible
+          DOCS_URL="https://faster-hft.github.io/faster-thread-affinity/"
+
+          if curl -f -s "$DOCS_URL" > /dev/null; then
+            echo "✅ Documentation site is accessible: $DOCS_URL"
+          else
+            echo "⚠️ Documentation site might still be deploying"
+            echo "URL: $DOCS_URL"
+          fi
+
+          # Check JavaDoc
+          JAVADOC_URL="${DOCS_URL}api/"
+          if curl -f -s "$JAVADOC_URL" > /dev/null; then
+            echo "✅ JavaDoc is accessible: $JAVADOC_URL"
+          else
+            echo "⚠️ JavaDoc might still be deploying"
+            echo "URL: $JAVADOC_URL"
+          fi
+
+      - name: Documentation summary
+        run: |
+          echo "📚 Documentation deployed successfully!"
+          echo "🌐 Documentation site: https://faster-hft.github.io/faster-thread-affinity/"
+          echo "📖 JavaDoc API: https://faster-hft.github.io/faster-thread-affinity/api/"
+          echo "📋 Source: https://github.com/faster-hft/faster-thread-affinity"
