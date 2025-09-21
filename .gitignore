@@ -1,0 +1,23 @@
+# IDE files
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Build artifacts
+target/
+build/
+out/
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
