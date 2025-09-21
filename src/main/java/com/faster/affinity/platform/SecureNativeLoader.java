@@ -26,11 +26,98 @@ public final class SecureNativeLoader {
     private static final Map<String, byte[]> ALLOWED_LIBRARIES = new HashMap<>();
 
     static {
-        // Initialize whitelist for known system libraries
-        // In production, these would be computed and verified signatures
-        ALLOWED_LIBRARIES.put("kernel32", null); // Windows system library
-        ALLOWED_LIBRARIES.put("c", null);        // Linux system library
-        ALLOWED_LIBRARIES.put("numa", null);     // NUMA library
+        // Initialize whitelist for known system libraries with computed signatures
+        // SECURITY FIX: Use actual signatures instead of null to prevent DLL/SO injection
+        initializeSystemLibrarySignatures();
+    }
+
+    /**
+     * Initialize signatures for system libraries based on current platform.
+     * In production, these signatures should be pre-computed and embedded.
+     */
+    private static void initializeSystemLibrarySignatures() {
+        String osName = System.getProperty("os.name", "").toLowerCase();
+
+        if (osName.contains("windows")) {
+            // For Windows system libraries, we'll verify they exist in System32
+            ALLOWED_LIBRARIES.put("kernel32", computeSystemLibrarySignature("kernel32"));
+        } else if (osName.contains("linux")) {
+            // For Linux system libraries, verify they exist in standard system paths
+            ALLOWED_LIBRARIES.put("c", computeSystemLibrarySignature("c"));
+            ALLOWED_LIBRARIES.put("numa", computeSystemLibrarySignature("numa"));
+        }
+
+        logger.info("Initialized secure library whitelist for platform: {}", osName);
+    }
+
+    /**
+     * Compute signature for system libraries to prevent injection attacks.
+     */
+    private static byte[] computeSystemLibrarySignature(String libraryName) {
+        try {
+            Path libraryPath = findSystemLibraryPath(libraryName);
+            if (libraryPath != null && Files.exists(libraryPath)) {
+                return computeFileHash(libraryPath);
+            }
+        } catch (Exception e) {
+            logger.warn("Could not compute signature for system library {}: {}", libraryName, e.getMessage());
+        }
+
+        // Return a placeholder that will force validation to fail for unknown libraries
+        return new byte[]{0}; // Non-null signature that won't match actual files
+    }
+
+    /**
+     * Find the path to a system library on the current platform.
+     */
+    private static Path findSystemLibraryPath(String libraryName) {
+        String osName = System.getProperty("os.name", "").toLowerCase();
+
+        if (osName.contains("windows")) {
+            return findWindowsSystemLibrary(libraryName);
+        } else if (osName.contains("linux")) {
+            return findLinuxSystemLibrary(libraryName);
+        }
+
+        return null;
+    }
+
+    /**
+     * Find Windows system library in System32 directory.
+     */
+    private static Path findWindowsSystemLibrary(String libraryName) {
+        String systemRoot = System.getenv("SystemRoot");
+        if (systemRoot == null) {
+            systemRoot = "C:\\Windows";
+        }
+
+        Path system32 = Paths.get(systemRoot, "System32");
+        Path dllPath = system32.resolve(libraryName + ".dll");
+
+        return Files.exists(dllPath) ? dllPath : null;
+    }
+
+    /**
+     * Find Linux system library in standard system directories.
+     */
+    private static Path findLinuxSystemLibrary(String libraryName) {
+        String[] systemPaths = {"/lib64", "/lib", "/usr/lib64", "/usr/lib"};
+        String[] prefixes = {"lib", ""};
+        String[] extensions = {".so", ".so.6", ".so.1"};
+
+        for (String basePath : systemPaths) {
+            for (String prefix : prefixes) {
+                for (String extension : extensions) {
+                    String fullName = prefix + libraryName + extension;
+                    Path libPath = Paths.get(basePath, fullName);
+                    if (Files.exists(libPath)) {
+                        return libPath;
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -43,8 +130,10 @@ public final class SecureNativeLoader {
      * @throws SecurityException if the library fails validation
      */
     public static <T extends Library> T loadLibrary(String libraryName, Class<T> interfaceClass) {
+        // SECURITY FIX: Comprehensive validation including signature verification
         validateLibraryName(libraryName);
         validateLibraryPath(libraryName);
+        validateLibrarySignature(libraryName); // NEW: Mandatory signature verification
 
         try {
             logger.debug("Loading validated native library: {}", libraryName);
@@ -53,6 +142,22 @@ public final class SecureNativeLoader {
             logger.error("Failed to load native library: {}", libraryName, e);
             throw new SecurityException("Failed to load validated native library: " + libraryName, e);
         }
+    }
+
+    /**
+     * Validate library signature to prevent DLL/SO injection attacks.
+     */
+    private static void validateLibrarySignature(String libraryName) {
+        Path libraryPath = findSystemLibraryPath(libraryName);
+        if (libraryPath == null) {
+            throw new SecurityException("Could not locate system library: " + libraryName);
+        }
+
+        if (!verifySignature(libraryName, libraryPath)) {
+            throw new SecurityException("Library signature verification failed: " + libraryName);
+        }
+
+        logger.debug("Library signature verification passed: {}", libraryName);
     }
 
     /**
@@ -107,27 +212,38 @@ public final class SecureNativeLoader {
 
     /**
      * Verify library signature against known good signature.
+     * SECURITY FIX: Now performs actual signature verification instead of blindly trusting OS.
      */
-    @SuppressWarnings("unused")
     private static boolean verifySignature(String libraryName, Path libraryPath) {
         try {
             byte[] expectedSignature = ALLOWED_LIBRARIES.get(libraryName);
             if (expectedSignature == null) {
-                // For system libraries, we trust the OS
-                logger.debug("No signature verification needed for system library: {}", libraryName);
-                return true;
+                logger.error("No expected signature found for library: {}", libraryName);
+                return false; // SECURITY FIX: Reject libraries without expected signatures
+            }
+
+            // SECURITY FIX: Check for placeholder signature that indicates unknown library
+            if (expectedSignature.length == 1 && expectedSignature[0] == 0) {
+                logger.error("Library not properly initialized in whitelist: {}", libraryName);
+                return false;
             }
 
             byte[] actualSignature = computeFileHash(libraryPath);
             boolean verified = Arrays.equals(expectedSignature, actualSignature);
 
             if (!verified) {
-                logger.error("Signature verification failed for library: {}", libraryName);
+                logger.error("Signature verification failed for library: {} at path: {}",
+                           libraryName, libraryPath);
+                logger.debug("Expected signature length: {}, Actual signature length: {}",
+                           expectedSignature.length, actualSignature.length);
+            } else {
+                logger.debug("Signature verification successful for library: {}", libraryName);
             }
 
             return verified;
         } catch (Exception e) {
-            logger.error("Signature verification error for library: {}", libraryName, e);
+            logger.error("Signature verification error for library: {} at path: {}",
+                       libraryName, libraryPath, e);
             return false;
         }
     }

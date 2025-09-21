@@ -38,6 +38,11 @@ public final class AffinityConfig {
 
     // Transparent Hugepage control defaults (TLB miss reduction)
     private static final boolean DEFAULT_ENABLE_HUGEPAGE_MANAGEMENT = true;
+
+    // Rate limiting defaults (DoS protection)
+    private static final long DEFAULT_MAX_OPERATIONS_PER_SECOND = 1000; // 1000 ops/sec per thread
+    private static final long DEFAULT_MAX_BURST_OPERATIONS = 100;       // 100 burst operations
+    private static final boolean DEFAULT_ENABLE_RATE_LIMITING = true;
     private static final boolean DEFAULT_AUTO_CONFIGURE_HUGEPAGES = false;
     private static final boolean DEFAULT_RESTORE_HUGEPAGE_SETTINGS_ON_SHUTDOWN = true;
 
@@ -83,6 +88,11 @@ public final class AffinityConfig {
     private final boolean enableMemoryPrefetching;
     private final boolean autoDetectPrefetchCapabilities;
 
+    // Rate limiting fields (DoS protection)
+    private final boolean enableRateLimiting;
+    private final long maxOperationsPerSecond;
+    private final long maxBurstOperations;
+
     private AffinityConfig(Builder builder) {
         this.enablePerformanceCounters = builder.enablePerformanceCounters;
         this.enableRealtimeFeatures = builder.enableRealtimeFeatures;
@@ -113,6 +123,11 @@ public final class AffinityConfig {
         this.restoreHugepageSettingsOnShutdown = builder.restoreHugepageSettingsOnShutdown;
         this.enableMemoryPrefetching = builder.enableMemoryPrefetching;
         this.autoDetectPrefetchCapabilities = builder.autoDetectPrefetchCapabilities;
+
+        // Rate limiting initialization
+        this.enableRateLimiting = builder.enableRateLimiting;
+        this.maxOperationsPerSecond = builder.maxOperationsPerSecond;
+        this.maxBurstOperations = builder.maxBurstOperations;
 
         if (developerMode) {
             logger.info("AffinityConfig initialized in developer mode: {}", this);
@@ -252,6 +267,11 @@ public final class AffinityConfig {
     public boolean isMemoryPrefetchingEnabled() { return enableMemoryPrefetching; }
     public boolean isAutoDetectPrefetchCapabilities() { return autoDetectPrefetchCapabilities; }
 
+    // Rate limiting getters
+    public boolean isRateLimitingEnabled() { return enableRateLimiting; }
+    public long getMaxOperationsPerSecond() { return maxOperationsPerSecond; }
+    public long getMaxBurstOperations() { return maxBurstOperations; }
+
     // Validation methods
     public void validateConfiguration() {
         if (maxRetryAttempts < 0 || maxRetryAttempts > 10) {
@@ -268,6 +288,19 @@ public final class AffinityConfig {
         }
         if (irqScanIntervalMs < 1000) {
             throw new IllegalArgumentException("irqScanIntervalMs must be at least 1000ms");
+        }
+
+        // Rate limiting validation
+        if (enableRateLimiting) {
+            if (maxOperationsPerSecond <= 0 || maxOperationsPerSecond > 100000) {
+                throw new IllegalArgumentException("maxOperationsPerSecond must be between 1 and 100000");
+            }
+            if (maxBurstOperations <= 0 || maxBurstOperations > 10000) {
+                throw new IllegalArgumentException("maxBurstOperations must be between 1 and 10000");
+            }
+            if (maxBurstOperations > maxOperationsPerSecond) {
+                throw new IllegalArgumentException("maxBurstOperations cannot exceed maxOperationsPerSecond");
+            }
         }
     }
 
@@ -308,6 +341,11 @@ public final class AffinityConfig {
         private boolean restoreHugepageSettingsOnShutdown = DEFAULT_RESTORE_HUGEPAGE_SETTINGS_ON_SHUTDOWN;
         private boolean enableMemoryPrefetching = DEFAULT_ENABLE_MEMORY_PREFETCHING;
         private boolean autoDetectPrefetchCapabilities = DEFAULT_AUTO_DETECT_PREFETCH_CAPABILITIES;
+
+        // Rate limiting builder fields
+        private boolean enableRateLimiting = DEFAULT_ENABLE_RATE_LIMITING;
+        private long maxOperationsPerSecond = DEFAULT_MAX_OPERATIONS_PER_SECOND;
+        private long maxBurstOperations = DEFAULT_MAX_BURST_OPERATIONS;
 
         public Builder enablePerformanceCounters(boolean enable) {
             this.enablePerformanceCounters = enable;
@@ -433,6 +471,28 @@ public final class AffinityConfig {
 
         public Builder autoDetectPrefetchCapabilities(boolean autoDetect) {
             this.autoDetectPrefetchCapabilities = autoDetect;
+            return this;
+        }
+
+        // Rate limiting builder methods
+        public Builder enableRateLimiting(boolean enable) {
+            this.enableRateLimiting = enable;
+            return this;
+        }
+
+        public Builder maxOperationsPerSecond(long maxOps) {
+            if (maxOps <= 0) {
+                throw new IllegalArgumentException("Max operations per second must be positive");
+            }
+            this.maxOperationsPerSecond = maxOps;
+            return this;
+        }
+
+        public Builder maxBurstOperations(long maxBurst) {
+            if (maxBurst <= 0) {
+                throw new IllegalArgumentException("Max burst operations must be positive");
+            }
+            this.maxBurstOperations = maxBurst;
             return this;
         }
 

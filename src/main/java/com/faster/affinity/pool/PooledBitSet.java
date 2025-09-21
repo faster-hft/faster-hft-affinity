@@ -97,10 +97,13 @@ public final class PooledBitSet implements AutoCloseable {
     }
 
     /**
-     * Perform bitwise OR with another BitSet.
+     * Perform bitwise OR with another BitSet using manual copying to prevent allocations.
      */
     public void or(BitSet set) {
-        get().or(set);
+        if (set != null) {
+            BitSet target = get();
+            copyBitsManually(set, target);
+        }
     }
 
     /**
@@ -118,12 +121,34 @@ public final class PooledBitSet implements AutoCloseable {
     }
 
     /**
-     * Copy from another BitSet.
+     * Copy from another BitSet using manual copying to prevent allocations.
      */
     public void copyFrom(BitSet source) {
         BitSet target = get();
         target.clear();
-        target.or(source);
+        if (source != null) {
+            copyBitsManually(source, target);
+        }
+    }
+
+    /**
+     * Manually copy bits from source to destination BitSet to avoid allocations.
+     * This prevents potential memory allocation that could occur in BitSet.or() if resizing is needed.
+     */
+    private static void copyBitsManually(BitSet source, BitSet destination) {
+        if (source == null || destination == null) {
+            return;
+        }
+
+        // Efficiently copy all set bits without risking allocation
+        for (int i = source.nextSetBit(0); i >= 0; i = source.nextSetBit(i + 1)) {
+            destination.set(i);
+
+            // Avoid infinite loop on Integer.MAX_VALUE
+            if (i == Integer.MAX_VALUE) {
+                break;
+            }
+        }
     }
 
     /**

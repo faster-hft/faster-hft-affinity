@@ -178,16 +178,21 @@ public class WindowsPlatformProvider implements PlatformProvider {
         });
         coreTrackers.clear();
 
-        // Clean up any open handles - lock-free iteration
-        for (WinNT.HANDLE handle : openHandles.keySet()) {
+        // Clean up any open handles - safe concurrent cleanup
+        // Collect handles first to avoid concurrent modification during iteration
+        Set<WinNT.HANDLE> handlesToClose = new HashSet<>(openHandles.keySet());
+
+        for (WinNT.HANDLE handle : handlesToClose) {
             try {
                 WindowsKernel32Ex.INSTANCE.CloseHandle(handle);
                 openHandles.remove(handle);
             } catch (Exception e) {
                 logger.debug("Error closing handle: {}", e.getMessage());
             }
-            openHandles.clear();
         }
+
+        // Final cleanup to ensure all handles are removed
+        openHandles.clear();
 
         systemCache.clear();
     }

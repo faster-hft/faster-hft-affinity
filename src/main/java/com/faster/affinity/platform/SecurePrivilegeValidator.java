@@ -10,8 +10,12 @@ import org.slf4j.LoggerFactory;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.file.Path;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -176,21 +180,19 @@ public final class SecurePrivilegeValidator {
     }
 
     /**
-     * Check Windows UAC elevation status.
+     * Check Windows UAC elevation status using safe system properties.
+     * Removed unsafe process execution to prevent privilege escalation vectors.
      */
     private static boolean checkWindowsUACElevation() {
         try {
-            // Check registry or use Windows APIs to determine elevation
-            ProcessBuilder pb = new ProcessBuilder("cmd", "/c", "echo %USERPROFILE%");
-            Process process = pb.start();
-
-            // Use timeout instead of indefinite blocking
-            if (!process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) {
-                process.destroyForcibly();
-                return false;
+            // Safe method: Check user.name system property and file access
+            String userName = System.getProperty("user.name");
+            if ("Administrator".equalsIgnoreCase(userName) || "admin".equalsIgnoreCase(userName)) {
+                logger.debug("Running as administrator user: {}", userName);
+                return true;
             }
 
-            // Check if we can access elevated locations
+            // Safe method: Check if we can access elevated locations (no process execution)
             return canAccessElevatedPath("C:\\Windows\\System32\\config");
 
         } catch (Exception e) {
@@ -200,26 +202,41 @@ public final class SecurePrivilegeValidator {
     }
 
     /**
-     * Check Linux capabilities for CPU affinity.
+     * Check Linux capabilities for CPU affinity using safe file system access.
+     * Removed unsafe process execution to prevent privilege escalation vectors.
      */
     private static boolean checkLinuxCapabilities() {
         try {
-            // Check if CAP_SYS_NICE capability is available
-            ProcessBuilder pb = new ProcessBuilder("getpcaps", String.valueOf(ProcessHandle.current().pid()));
-            Process process = pb.start();
-
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line = reader.readLine();
-                if (line != null && line.contains("cap_sys_nice")) {
-                    return true;
+            // Safe method: Check /proc filesystem for capability information
+            // This avoids executing external processes which could be attack vectors
+            Path statusPath = java.nio.file.Paths.get("/proc/self/status");
+            if (java.nio.file.Files.exists(statusPath) && java.nio.file.Files.isReadable(statusPath)) {
+                try {
+                    List<String> lines = java.nio.file.Files.readAllLines(statusPath);
+                    for (String line : lines) {
+                        // Check for capability bitmasks that include CAP_SYS_NICE
+                        if (line.startsWith("CapEff:") || line.startsWith("CapPrm:")) {
+                            // CAP_SYS_NICE is bit 23, so check if it's set
+                            String capValue = line.split("\\s+")[1];
+                            try {
+                                long caps = Long.parseUnsignedLong(capValue, 16);
+                                // Check bit 23 for CAP_SYS_NICE
+                                if ((caps & (1L << 23)) != 0) {
+                                    logger.debug("CAP_SYS_NICE capability detected via /proc/self/status");
+                                    return true;
+                                }
+                            } catch (NumberFormatException e) {
+                                logger.debug("Failed to parse capability value: {}", capValue);
+                            }
+                        }
+                    }
+                } catch (java.io.IOException e) {
+                    logger.debug("Failed to read /proc/self/status: {}", e.getMessage());
                 }
             }
 
-            // Use timeout instead of indefinite blocking
-            if (!process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) {
-                process.destroyForcibly();
-            }
-            return false;
+            // Fallback: Try to access affinity files to test permissions
+            return canAccessLinuxAffinityFiles();
 
         } catch (Exception e) {
             logger.debug("Linux capabilities check failed", e);

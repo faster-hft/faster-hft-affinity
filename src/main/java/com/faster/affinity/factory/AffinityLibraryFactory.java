@@ -22,6 +22,20 @@ public final class AffinityLibraryFactory {
         // Prevent instantiation
     }
 
+    // Thread-safe singleton holder pattern for critical initialization
+    private static class DefaultInstanceHolder {
+        private static final AffinityLibrary INSTANCE = createInstanceSafely();
+
+        private static AffinityLibrary createInstanceSafely() {
+            try {
+                return new AffinityLibraryImpl(AffinityConfig.getInstance());
+            } catch (Exception e) {
+                logger.error("Failed to create default affinity library: {}", e.getMessage(), e);
+                throw new ExceptionInInitializerError("Failed to create default affinity library: " + e.getMessage());
+            }
+        }
+    }
+
     /**
      * Creates a new affinity library instance with default configuration.
      */
@@ -42,27 +56,18 @@ public final class AffinityLibraryFactory {
     }
 
     /**
-     * Gets the default singleton instance, creating it if necessary.
+     * Gets the default singleton instance using thread-safe initialization-on-demand holder pattern.
+     * This eliminates all race conditions and ensures exactly one instance is created.
      */
     public static AffinityLibrary getDefault() {
-        AffinityLibrary instance = defaultInstance.get();
-        if (instance == null) {
-            // Lock-free initialization using AtomicReference compareAndSet
-            AffinityLibrary newInstance = create();
-            if (defaultInstance.compareAndSet(null, newInstance)) {
-                logger.info("Created default affinity library instance");
-                return newInstance;
-            } else {
-                // Another thread won the race, use their instance
-                try {
-                    newInstance.shutdown();
-                } catch (Exception e) {
-                    logger.debug("Error cleaning up unused instance: {}", e.getMessage());
-                }
-                return defaultInstance.get();
-            }
+        // Check if a custom instance has been set
+        AffinityLibrary customInstance = defaultInstance.get();
+        if (customInstance != null) {
+            return customInstance;
         }
-        return instance;
+
+        // Use thread-safe singleton holder pattern - guaranteed single instance, no race conditions
+        return DefaultInstanceHolder.INSTANCE;
     }
 
     /**

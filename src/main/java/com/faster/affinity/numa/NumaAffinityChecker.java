@@ -2,6 +2,7 @@ package com.faster.affinity.numa;
 
 import com.faster.affinity.core.NUMAManager;
 import com.faster.affinity.platform.PlatformProvider;
+import com.faster.affinity.utils.ThreadLocalManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,8 +27,9 @@ public final class NumaAffinityChecker {
     private final AtomicLong violations = new AtomicLong();
     private final AtomicLong cacheHits = new AtomicLong();
 
-    // Thread-local cache for current thread's NUMA node
-    private final ThreadLocal<CachedNodeInfo> threadLocalNode = ThreadLocal.withInitial(CachedNodeInfo::new);
+    // Managed thread-local cache for current thread's NUMA node
+    private final ThreadLocalManager.ManagedThreadLocal<CachedNodeInfo> threadLocalNode =
+        ThreadLocalManager.create("numa-node-cache", CachedNodeInfo::new);
 
     public NumaAffinityChecker(PlatformProvider platformProvider, NUMAManager numaManager) {
         this.platformProvider = platformProvider;

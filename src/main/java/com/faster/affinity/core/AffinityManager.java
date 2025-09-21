@@ -8,11 +8,16 @@ import com.faster.affinity.platform.PlatformProvider;
 import com.faster.affinity.platform.PlatformProviderFactory;
 import com.faster.affinity.topology.TopologyDetector;
 import com.faster.affinity.cache.HotPathCache;
+import com.faster.affinity.cache.BoundedCache;
 import com.faster.affinity.pool.ObjectPoolManager;
 import com.faster.affinity.numa.NumaAffinityChecker;
 import com.faster.affinity.performance.HFTPerformanceProfiler;
 import com.faster.affinity.annotations.HotPath;
 import com.faster.affinity.annotations.ColdPath;
+import com.faster.affinity.security.RateLimiter;
+import com.faster.affinity.security.AuditLogger;
+import com.faster.affinity.utils.ThreadLocalManager;
+import com.faster.affinity.transaction.TransactionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.BitSet;
@@ -27,13 +32,35 @@ import java.util.concurrent.atomic.AtomicReference;
  * Thread-safe, production-ready implementation with proper error handling and caching.
  */
 public final class AffinityManager {
+
+    /**
+     * Lightweight exception for transaction control flow that doesn't generate stack traces.
+     */
+    private static class TransactionOperationException extends RuntimeException {
+        private final int errorCode;
+
+        public TransactionOperationException(String message, int errorCode) {
+            super(message, null, false, false); // No stack trace for performance
+            this.errorCode = errorCode;
+        }
+
+        public int getErrorCode() {
+            return errorCode;
+        }
+    }
     private static final Logger logger = LoggerFactory.getLogger(AffinityManager.class);
 
     // Maximum supported CPUs to prevent integer overflow
     private static final int MAX_SUPPORTED_CPUS = 4096;
     private static final int MAX_LONG_ARRAY_SIZE = (MAX_SUPPORTED_CPUS + 63) / 64;
 
+    // Thread-local empty BitSet to avoid race conditions while preventing allocations
+    // MEMORY LEAK FIX: Use ThreadLocalManager for proper cleanup in thread pools
+    private static final ThreadLocalManager.ManagedThreadLocal<BitSet> THREAD_LOCAL_EMPTY_BITSET =
+        ThreadLocalManager.create("affinity-empty-bitset", () -> new BitSet(), BitSet::clear);
+
     private static final AtomicReference<AffinityManager> instanceRef = new AtomicReference<>();
+    private static final Object initializationLock = new Object();
 
     private final AffinityConfig config;
     private final TopologyDetector topologyDetector;
@@ -45,8 +72,8 @@ public final class AffinityManager {
     private final PrefetchManager prefetchManager;
     private final PlatformProvider platformProvider;
 
-    // Caching and state management
-    private final ConcurrentHashMap<String, CacheEntry> operationCache;
+    // Bounded caching for memory safety
+    private final BoundedCache<String, Object> operationCache;
     private final AtomicBoolean initialized = new AtomicBoolean(false);
     private final AtomicBoolean initializing = new AtomicBoolean(false);
     private final AtomicReference<SystemCapabilities> systemCapabilities = new AtomicReference<>();
@@ -60,13 +87,22 @@ public final class AffinityManager {
     // HFT Performance profiler
     private volatile HFTPerformanceProfiler hftProfiler;
 
-    // Thread-local arrays for performance (legacy - being replaced by HotPathCache)
-    private static final ThreadLocal<long[]> TL_MASK_ARRAY = ThreadLocal.withInitial(() -> new long[MAX_LONG_ARRAY_SIZE]);
-    private static final ThreadLocal<int[]> TL_INT_ARRAY = ThreadLocal.withInitial(() -> new int[8]);
+    // Rate limiter for DoS protection
+    private final RateLimiter rateLimiter;
+
+    // Managed thread-local arrays for performance with automatic cleanup
+    private static final ThreadLocalManager.ManagedThreadLocal<long[]> TL_MASK_ARRAY =
+        ThreadLocalManager.create("affinity-mask-array", () -> new long[MAX_LONG_ARRAY_SIZE]);
+    private static final ThreadLocalManager.ManagedThreadLocal<int[]> TL_INT_ARRAY =
+        ThreadLocalManager.create("affinity-int-array", () -> new int[8]);
 
     private AffinityManager(AffinityConfig config) {
         this.config = config;
-        this.operationCache = new ConcurrentHashMap<>();
+
+        // Initialize bounded cache with configuration-based sizing
+        int cacheSize = config.isRateLimitingEnabled() ?
+            (int) Math.min(config.getMaxOperationsPerSecond() * 2, 5000) : 1000;
+        this.operationCache = new BoundedCache<>(cacheSize, config.getCacheExpiryMs());
 
         // Initialize platform-specific provider
         this.platformProvider = PlatformProviderFactory.createProvider(config);
@@ -86,50 +122,87 @@ public final class AffinityManager {
         this.prefetchManager = config.isMemoryPrefetchingEnabled() ?
                 new PrefetchManager(platformProvider, config) : null;
 
-        logger.info("AffinityManager created with config: {}", config);
+        // Initialize rate limiter for DoS protection
+        this.rateLimiter = new RateLimiter(
+            config.getMaxOperationsPerSecond(),
+            config.getMaxBurstOperations(),
+            1000 // 1 second window
+        );
+
+        logger.info("AffinityManager created with config: {} and rate limiting enabled", config);
     }
 
     public static AffinityManager getInstance() throws ConfigurationException {
         AffinityManager result = instanceRef.get();
         if (result == null) {
-            // Lock-free singleton initialization
-            AffinityManager newInstance = new AffinityManager(AffinityConfig.getInstance());
-            newInstance.initialize();
+            synchronized (initializationLock) {
+                // Double-checked locking pattern
+                result = instanceRef.get();
+                if (result == null) {
+                    logger.debug("Creating new AffinityManager instance");
+                    AffinityManager newInstance = new AffinityManager(AffinityConfig.getInstance());
 
-            if (instanceRef.compareAndSet(null, newInstance)) {
-                return newInstance;
-            } else {
-                // Another thread won the race, cleanup and use theirs
-                try {
-                    newInstance.shutdown();
-                } catch (Exception e) {
-                    logger.debug("Error cleaning up unused manager instance: {}", e.getMessage());
+                    try {
+                        newInstance.initialize();
+                        // Only set the reference after successful initialization
+                        instanceRef.set(newInstance);
+                        result = newInstance;
+                        logger.info("AffinityManager instance created and initialized successfully");
+                    } catch (Exception e) {
+                        // Clean up failed instance
+                        try {
+                            newInstance.shutdown();
+                        } catch (Exception cleanupException) {
+                            logger.debug("Error during cleanup of failed instance: {}", cleanupException.getMessage());
+                        }
+                        throw new ConfigurationException("getInstance", "Failed to initialize AffinityManager: " + e.getMessage(), e);
+                    }
                 }
-                return instanceRef.get();
             }
-        } else if (!result.initialized.get()) {
-            // Handle case where instance exists but initialization failed
+        }
+
+        // Verify instance is properly initialized
+        if (!result.initialized.get()) {
             throw new ConfigurationException("getInstance", "AffinityManager instance exists but is not properly initialized");
         }
+
         return result;
     }
 
     public static AffinityManager getInstance(AffinityConfig config) throws ConfigurationException {
-        // Lock-free replacement
-        AffinityManager oldInstance = instanceRef.get();
-        if (oldInstance != null) {
-            logger.warn("Replacing existing AffinityManager instance");
-            try {
-                oldInstance.shutdown();
-            } catch (Exception e) {
-                logger.warn("Error shutting down existing instance: {}", e.getMessage());
-            }
+        if (config == null) {
+            throw new ConfigurationException("getInstance", "Configuration cannot be null");
         }
 
-        AffinityManager newInstance = new AffinityManager(config);
-        newInstance.initialize();
-        instanceRef.set(newInstance);
-        return newInstance;
+        synchronized (initializationLock) {
+            AffinityManager oldInstance = instanceRef.get();
+            if (oldInstance != null) {
+                logger.warn("Replacing existing AffinityManager instance with new configuration");
+                try {
+                    oldInstance.shutdown();
+                } catch (Exception e) {
+                    logger.warn("Error shutting down existing instance during replacement: {}", e.getMessage());
+                }
+            }
+
+            logger.debug("Creating new AffinityManager instance with custom configuration");
+            AffinityManager newInstance = new AffinityManager(config);
+
+            try {
+                newInstance.initialize();
+                instanceRef.set(newInstance);
+                logger.info("AffinityManager instance replaced and initialized successfully");
+                return newInstance;
+            } catch (Exception e) {
+                // Clean up failed instance
+                try {
+                    newInstance.shutdown();
+                } catch (Exception cleanupException) {
+                    logger.debug("Error during cleanup of failed replacement instance: {}", cleanupException.getMessage());
+                }
+                throw new ConfigurationException("getInstance", "Failed to initialize AffinityManager with custom config: " + e.getMessage(), e);
+            }
+        }
     }
 
     private void initialize() throws ConfigurationException {
@@ -196,9 +269,18 @@ public final class AffinityManager {
             }
 
             initialized.set(true);
+
+            // Audit log successful system initialization
+            AuditLogger.logSystemInitialization("AffinityManager", "1.0.0",
+                config.toString(), true);
+
             logger.info("AffinityManager initialized successfully: {}", caps);
 
         } catch (Exception e) {
+            // Audit log failed system initialization
+            AuditLogger.logSystemInitialization("AffinityManager", "1.0.0",
+                "INIT_FAILED: " + e.getMessage(), false);
+
             logger.error("Failed to initialize AffinityManager", e);
             throw new ConfigurationException("initialize", "Failed to initialize AffinityManager: " + e.getMessage());
         } finally {
@@ -249,22 +331,13 @@ public final class AffinityManager {
      */
     @HotPath("Primary hot path for thread affinity queries")
     public OperationResult<BitSet> getCurrentThreadAffinityFast() {
-        long startTime = System.nanoTime();
-
+        // Profiling disabled for maximum performance - use compile-time flag if needed
         if (lockFreeOps != null) {
-            OperationResult<BitSet> result = lockFreeOps.getCurrentThreadAffinityFast();
-            if (hftProfiler != null) {
-                hftProfiler.recordHotPathOperation(System.nanoTime() - startTime);
-            }
-            return result;
+            return lockFreeOps.getCurrentThreadAffinityFast();
         }
 
         // Fallback to standard implementation
-        OperationResult<BitSet> result = getThreadAffinity(platformProvider.getCurrentThreadId());
-        if (hftProfiler != null) {
-            hftProfiler.recordFallbackOperation(System.nanoTime() - startTime);
-        }
-        return result;
+        return getThreadAffinity(platformProvider.getCurrentThreadId());
     }
 
     /**
@@ -299,9 +372,210 @@ public final class AffinityManager {
         return successCount;
     }
 
+    /**
+     * Transactional bulk affinity operations with rollback on failure.
+     * Ensures all-or-nothing semantics for critical multi-thread operations.
+     */
+    public OperationResult<Integer> setBulkThreadAffinityTransactional(long[] threadIds, BitSet cpuMask) {
+        if (threadIds == null || threadIds.length == 0) {
+            return OperationResult.invalidParameterFailure();
+        }
+
+        if (cpuMask == null || cpuMask.isEmpty()) {
+            return OperationResult.invalidParameterFailure();
+        }
+
+        try {
+            Integer result = TransactionManager.executeTransaction("setBulkThreadAffinityTransactional", context -> {
+                int successCount = 0;
+
+                for (long threadId : threadIds) {
+                    // Get current affinity for rollback
+                    OperationResult<BitSet> affinityResult = getThreadAffinity(threadId);
+                    BitSet currentAffinity = affinityResult.isSuccess() ? affinityResult.getValue() : null;
+
+                    // Execute the affinity change with rollback action
+                    context.executeWithRollback(
+                        "setThreadAffinity_" + threadId,
+                        () -> {
+                            OperationResult<Void> setResult = setThreadAffinity(threadId, cpuMask);
+                            if (!setResult.isSuccess()) {
+                                // Use a lightweight exception for transaction control flow
+                                throw new TransactionOperationException("Failed to set affinity for thread " + threadId,
+                                    setResult.getErrorCode());
+                            }
+                        },
+                        () -> {
+                            // Rollback: restore original affinity
+                            if (currentAffinity != null) {
+                                try {
+                                    setThreadAffinity(threadId, currentAffinity);
+                                    logger.debug("Rolled back affinity for thread {}", threadId);
+                                } catch (Exception rollbackError) {
+                                    logger.error("Failed to rollback affinity for thread {}: {}",
+                                        threadId, rollbackError.getMessage());
+                                }
+                            }
+                        }
+                    );
+
+                    successCount++;
+                }
+
+                AuditLogger.logAffinityOperation(AuditLogger.AuditEventType.AFFINITY_SET,
+                    "setBulkThreadAffinityTransactional", -1, cpuMask.toString(),
+                    "Successfully set affinity for " + successCount + " threads");
+
+                return successCount;
+            });
+            return OperationResult.success(result);
+
+        } catch (TransactionManager.TransactionException e) {
+            String errorMsg = "Transactional bulk affinity operation failed: " + e.getMessage();
+            logger.error(errorMsg, e);
+
+            AuditLogger.logSecurityViolation(AuditLogger.AuditEventType.AFFINITY_SET,
+                "setBulkThreadAffinityTransactional", errorMsg,
+                "Transaction ID: " + e.getTransactionId());
+
+            return OperationResult.failure(ErrorCodes.ERROR_TRANSACTION_ROLLBACK_FAILED, "setBulkThreadAffinityTransactional", errorMsg);
+        } catch (Exception e) {
+            String errorMsg = "Unexpected error in transactional bulk affinity operation: " + e.getMessage();
+            logger.error(errorMsg, e);
+            return OperationResult.failure(ErrorCodes.ERROR_OPERATION_FAILED, "setBulkThreadAffinityTransactional", errorMsg);
+        }
+    }
+
+    /**
+     * Transactionally configure a complete HFT environment for a thread.
+     * Sets up affinity, NUMA, CPU governor, and hugepages with rollback capability.
+     */
+    public OperationResult<Void> configureHFTEnvironmentTransactional(long threadId, BitSet cpuMask,
+                                                                     CPUGovernorManager.GovernorMode governor) {
+        if (threadId <= 0) {
+            return OperationResult.failure(new InvalidParameterException("configureHFTEnvironmentTransactional",
+                "threadId", "Thread ID must be positive"));
+        }
+
+        if (cpuMask == null || cpuMask.isEmpty()) {
+            return OperationResult.failure(new InvalidParameterException("configureHFTEnvironmentTransactional",
+                "cpuMask", "CPU mask cannot be null or empty"));
+        }
+
+        try {
+            return TransactionManager.executeTransaction("configureHFTEnvironmentTransactional", context -> {
+                // Step 1: Get current state for rollback
+                OperationResult<BitSet> currentAffinityResult = getThreadAffinity(threadId);
+                BitSet currentAffinity = currentAffinityResult.isSuccess() ? currentAffinityResult.getValue() : null;
+
+                // Step 2: Set thread affinity with rollback
+                context.executeWithRollback(
+                    "setThreadAffinity",
+                    () -> {
+                        OperationResult<Void> affinityResult = setThreadAffinity(threadId, cpuMask);
+                        if (!affinityResult.isSuccess()) {
+                            throw new RuntimeException("Failed to set thread affinity: " + affinityResult.getError().getMessage());
+                        }
+                    },
+                    () -> {
+                        if (currentAffinity != null) {
+                            try {
+                                setThreadAffinity(threadId, currentAffinity);
+                                logger.debug("Rolled back thread affinity for thread {}", threadId);
+                            } catch (Exception e) {
+                                logger.error("Failed to rollback thread affinity: {}", e.getMessage());
+                            }
+                        }
+                    }
+                );
+
+                // Step 3: Configure CPU governor for affected cores
+                if (cpuGovernorManager != null && governor != null) {
+                    for (int coreId = cpuMask.nextSetBit(0); coreId >= 0; coreId = cpuMask.nextSetBit(coreId + 1)) {
+                        final int finalCoreId = coreId;
+
+                        // Get current governor for rollback
+                        OperationResult<CPUGovernorManager.GovernorMode> currentGovernorResult =
+                            cpuGovernorManager.getCurrentGovernor(coreId);
+                        CPUGovernorManager.GovernorMode currentGovernor =
+                            currentGovernorResult.isSuccess() ? currentGovernorResult.getValue() : null;
+
+                        context.executeWithRollback(
+                            "setGovernor_" + coreId,
+                            () -> {
+                                OperationResult<Void> govResult = cpuGovernorManager.setGovernor(finalCoreId, governor);
+                                if (!govResult.isSuccess()) {
+                                    throw new RuntimeException("Failed to set CPU governor for core " + finalCoreId +
+                                        ": " + govResult.getError().getMessage());
+                                }
+                            },
+                            () -> {
+                                if (currentGovernor != null) {
+                                    try {
+                                        cpuGovernorManager.setGovernor(finalCoreId, currentGovernor);
+                                        logger.debug("Rolled back CPU governor for core {}", finalCoreId);
+                                    } catch (Exception e) {
+                                        logger.error("Failed to rollback CPU governor for core {}: {}", finalCoreId, e.getMessage());
+                                    }
+                                }
+                            }
+                        );
+                    }
+                }
+
+                // Step 4: Configure hugepages if available
+                if (hugepageManager != null) {
+                    context.executeWithRollback(
+                        "configureHugepages",
+                        () -> {
+                            OperationResult<Void> hugepageResult = hugepageManager.configureForHFT();
+                            if (!hugepageResult.isSuccess()) {
+                                logger.warn("Failed to configure hugepages: {}", hugepageResult.getError().getMessage());
+                                // Don't fail the entire transaction for hugepage configuration
+                            }
+                        },
+                        () -> {
+                            // Hugepage rollback is complex and system-wide, so we just log
+                            logger.info("Hugepage configuration would need manual rollback");
+                        }
+                    );
+                }
+
+                AuditLogger.logAffinityOperation(AuditLogger.AuditEventType.AFFINITY_SET,
+                    "configureHFTEnvironmentTransactional", threadId, cpuMask.toString(),
+                    "Successfully configured HFT environment");
+
+                return null; // Void return
+            });
+
+        } catch (TransactionManager.TransactionException e) {
+            String errorMsg = "HFT environment configuration failed: " + e.getMessage();
+            logger.error(errorMsg, e);
+
+            AuditLogger.logSecurityViolation(AuditLogger.AuditEventType.SYSTEM_INITIALIZATION,
+                "configureHFTEnvironmentTransactional", errorMsg,
+                "Transaction ID: " + e.getTransactionId() + ", Thread: " + threadId);
+
+            return OperationResult.failure(new OperationFailedException("configureHFTEnvironmentTransactional", errorMsg, e));
+
+        } catch (Exception e) {
+            String errorMsg = "Unexpected error in HFT environment configuration: " + e.getMessage();
+            logger.error(errorMsg, e);
+            return OperationResult.failure(new OperationFailedException("configureHFTEnvironmentTransactional", errorMsg, e));
+        }
+    }
+
     @HotPath("Standard thread affinity setting operation")
     public OperationResult<Void> setThreadAffinity(long threadId, BitSet cpuMask) {
         return executeWithRetry("setThreadAffinity", () -> {
+            // Rate limiting check for DoS protection
+            if (config.isRateLimitingEnabled() && !rateLimiter.tryAcquire()) {
+                AuditLogger.logRateLimitViolation("setThreadAffinity", threadId,
+                    "Max operations per second: " + config.getMaxOperationsPerSecond());
+                throw new SecurityException("Rate limit exceeded for setThreadAffinity operation. Thread: " +
+                                          Thread.currentThread().getId());
+            }
+
             validateParameters("setThreadAffinity", threadId, cpuMask);
 
             if (cpuMask.length() > MAX_SUPPORTED_CPUS) {
@@ -325,8 +599,13 @@ public final class AffinityManager {
             // Cache the successful operation
             if (config.isCachingEnabled()) {
                 String key = "thread_affinity_" + threadId;
-                operationCache.put(key, new CacheEntry(cpuMask.clone(), System.currentTimeMillis()));
+                operationCache.put(key, cpuMask.clone());
             }
+
+            // Audit log successful affinity operation
+            AuditLogger.logAffinityOperation(AuditLogger.AuditEventType.AFFINITY_SET,
+                "setThreadAffinity", threadId, cpuMask.toString(),
+                "Successfully set thread affinity to " + cpuMask.cardinality() + " CPUs");
 
             logger.debug("Successfully set thread {} affinity to {}", threadId, cpuMask);
             return null;
@@ -336,15 +615,23 @@ public final class AffinityManager {
     @HotPath("Standard thread affinity query operation")
     public OperationResult<BitSet> getThreadAffinity(long threadId) {
         return executeWithRetry("getThreadAffinity", () -> {
+            // Rate limiting check for DoS protection
+            if (config.isRateLimitingEnabled() && !rateLimiter.tryAcquire()) {
+                AuditLogger.logRateLimitViolation("getThreadAffinity", threadId,
+                    "Max operations per second: " + config.getMaxOperationsPerSecond());
+                throw new SecurityException("Rate limit exceeded for getThreadAffinity operation. Thread: " +
+                                          Thread.currentThread().getId());
+            }
+
             validateParameters("getThreadAffinity", threadId);
 
             // Check cache first
             if (config.isCachingEnabled()) {
                 String key = "thread_affinity_" + threadId;
-                CacheEntry cached = operationCache.get(key);
-                if (cached != null && !cached.isExpired(config.getCacheExpiryMs())) {
+                Object cached = operationCache.get(key);
+                if (cached != null) {
                     logger.debug("Returning cached thread affinity for {}", threadId);
-                    return (BitSet) ((BitSet) cached.getValue()).clone();
+                    return (BitSet) ((BitSet) cached).clone();
                 }
             }
 
@@ -364,8 +651,13 @@ public final class AffinityManager {
             // Cache the result
             if (config.isCachingEnabled()) {
                 String key = "thread_affinity_" + threadId;
-                operationCache.put(key, new CacheEntry(cpuMask.clone(), System.currentTimeMillis()));
+                operationCache.put(key, cpuMask.clone());
             }
+
+            // Audit log successful affinity query
+            AuditLogger.logAffinityOperation(AuditLogger.AuditEventType.AFFINITY_GET,
+                "getThreadAffinity", threadId, cpuMask.toString(),
+                "Successfully retrieved thread affinity: " + cpuMask.cardinality() + " CPUs");
 
             logger.debug("Retrieved thread {} affinity: {}", threadId, cpuMask);
             return cpuMask;
@@ -759,12 +1051,28 @@ public final class AffinityManager {
 
     public static BitSet longArrayToBitSet(long[] array, int maxBits) {
         if (array == null || maxBits <= 0) {
-            return new BitSet();
+            // Return thread-local empty BitSet to avoid race conditions
+            return THREAD_LOCAL_EMPTY_BITSET.get();
         }
 
         // Protect against integer overflow
         int safeMaxBits = Math.min(maxBits, MAX_SUPPORTED_CPUS);
-        BitSet bitSet = new BitSet(safeMaxBits);
+
+        // Try to use pooled BitSet instead of allocating
+        // Note: The returned BitSet will be owned by the caller
+        BitSet bitSet;
+        try {
+            bitSet = ObjectPoolManager.getBitSetPool().acquire();
+            if (bitSet != null) {
+                bitSet.clear();
+                // Note: We don't return this to pool since caller will own the BitSet
+            } else {
+                bitSet = new BitSet(safeMaxBits);
+            }
+        } catch (Exception ignored) {
+            // Pool unavailable, fall back to allocation
+            bitSet = new BitSet(safeMaxBits);
+        }
         int arrayLength = Math.min(array.length, (safeMaxBits + 63) / 64);
 
         for (int i = 0; i < arrayLength; i++) {
@@ -874,6 +1182,14 @@ public final class AffinityManager {
             }
         }
 
+        // Clean up ThreadLocal instances to prevent memory leaks
+        try {
+            ThreadLocalManager.cleanupAll();
+            logger.debug("ThreadLocal cleanup completed during shutdown");
+        } catch (Exception e) {
+            logger.warn("Error during ThreadLocal cleanup: {}", e.getMessage());
+        }
+
         operationCache.clear();
         initialized.set(false);
         initializing.set(false);
@@ -881,22 +1197,57 @@ public final class AffinityManager {
         logger.info("AffinityManager shutdown complete");
     }
 
-    // Helper classes
-
-    private static class CacheEntry {
-        private final Object value;
-        private final long timestamp;
-
-        public CacheEntry(Object value, long timestamp) {
-            this.value = value;
-            this.timestamp = timestamp;
-        }
-
-        public Object getValue() { return value; }
-        public boolean isExpired(long expiryMs) {
-            return System.currentTimeMillis() - timestamp > expiryMs;
-        }
+    /**
+     * Get rate limiting statistics for monitoring and debugging.
+     */
+    public RateLimiter.RateLimiterStats getRateLimitingStats() {
+        return rateLimiter.getStats();
     }
+
+    /**
+     * Get audit logging statistics for monitoring and debugging.
+     */
+    public AuditLogger.AuditStats getAuditStats() {
+        return AuditLogger.getAuditStats();
+    }
+
+    /**
+     * Get ThreadLocal usage statistics for memory leak monitoring.
+     */
+    public ThreadLocalManager.ThreadLocalStats getThreadLocalStats() {
+        return ThreadLocalManager.getStats();
+    }
+
+    /**
+     * Check for ThreadLocal memory leaks and log warnings.
+     */
+    public void checkForThreadLocalLeaks() {
+        ThreadLocalManager.checkForLeaks();
+    }
+
+    /**
+     * Clean up ThreadLocal values for the current thread.
+     * Should be called when threads are returned to pools.
+     */
+    public static void cleanupCurrentThread() {
+        ThreadLocalManager.cleanupCurrentThread();
+    }
+
+    /**
+     * Get cache statistics for monitoring and performance tuning.
+     */
+    public BoundedCache.CacheStats getCacheStats() {
+        return operationCache.getStats();
+    }
+
+    /**
+     * Check cache health and log warnings for potential issues.
+     */
+    public void checkCacheHealth() {
+        operationCache.checkHealth();
+    }
+
+    // Helper classes
 
     @FunctionalInterface
     private interface Operation<T> {

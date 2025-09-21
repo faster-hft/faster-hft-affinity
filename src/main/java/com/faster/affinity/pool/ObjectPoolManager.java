@@ -32,6 +32,11 @@ public final class ObjectPoolManager {
     private static volatile NumaLocalObjectPool<BitSet> numaBitSetPool;
     private static volatile NumaAffinityChecker numaChecker;
 
+    // Hot path optimized references (final after initialization to avoid cache line invalidation)
+    private static ObjectPool<BitSet> cachedBitSetPool;
+    private static ObjectPool<long[]> cachedLongArrayPool;
+    private static ObjectPool<int[]> cachedIntArrayPool;
+
     static {
         initialize();
     }
@@ -59,6 +64,11 @@ public final class ObjectPoolManager {
             );
             registerPool("int-array", intArrayPool);
 
+            // Set cached references for hot path optimization (no volatile reads needed)
+            cachedBitSetPool = bitSetPool;
+            cachedLongArrayPool = longArrayPool;
+            cachedIntArrayPool = intArrayPool;
+
             logger.info("ObjectPoolManager initialized with {} pools", pools.size());
 
         } catch (Exception e) {
@@ -70,23 +80,32 @@ public final class ObjectPoolManager {
     /**
      * Get the shared BitSet pool for CPU affinity operations.
      * Returns NUMA-aware pool if available, otherwise standard pool.
+     * Hot path optimized - avoids volatile reads.
      */
     public static ObjectPool<BitSet> getBitSetPool() {
-        return numaBitSetPool != null ? numaBitSetPool : bitSetPool;
+        // Check NUMA pool first (volatile read only once)
+        NumaLocalObjectPool<BitSet> numaPool = numaBitSetPool;
+        if (numaPool != null) {
+            return numaPool;
+        }
+        // Use cached reference to avoid volatile reads in hot path
+        return cachedBitSetPool;
     }
 
     /**
      * Get the shared long array pool for system call parameters.
+     * Hot path optimized - avoids volatile reads.
      */
     public static ObjectPool<long[]> getLongArrayPool() {
-        return longArrayPool;
+        return cachedLongArrayPool;
     }
 
     /**
      * Get the shared int array pool for temporary calculations.
+     * Hot path optimized - avoids volatile reads.
      */
     public static ObjectPool<int[]> getIntArrayPool() {
-        return intArrayPool;
+        return cachedIntArrayPool;
     }
 
     /**

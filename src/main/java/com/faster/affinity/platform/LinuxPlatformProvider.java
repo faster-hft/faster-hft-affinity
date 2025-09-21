@@ -227,15 +227,67 @@ public class LinuxPlatformProvider implements PlatformProvider {
         }
 
         try {
-            final int finalMaskLength = Math.min(maskLength, 16);
+            // Enhanced memory safety: strict bounds validation
+            final int finalMaskLength = Math.min(Math.min(maskLength, cpuMask.length), 16);
             if (maskLength > 16) {
-                logger.warn("CPU mask length {} exceeds maximum supported size", maskLength);
+                logger.warn("CPU mask length {} exceeds maximum supported size, truncating to 16", maskLength);
+            }
+            if (finalMaskLength <= 0) {
+                logger.error("Invalid mask length after validation: {}", finalMaskLength);
+                return ErrorCodes.ERROR_INVALID_PARAMETER;
             }
 
-            // Use managed memory to prevent leaks
-            return ResourceManager.withManagedMemory(8L * finalMaskLength, mask -> {
-                for (int i = 0; i < finalMaskLength && i < cpuMask.length; i++) {
-                    mask.setLong(i * 8L, cpuMask[i]);
+            // SECURITY FIX: Calculate required memory size with overflow protection
+            final long requiredMemorySize;
+            try {
+                requiredMemorySize = Math.multiplyExact(8L, finalMaskLength);
+            } catch (ArithmeticException e) {
+                logger.error("Integer overflow in memory size calculation: 8 * {}", finalMaskLength);
+                return ErrorCodes.ERROR_INVALID_PARAMETER;
+            }
+
+            // SECURITY FIX: Enhanced bounds checking with explicit limits
+            if (requiredMemorySize <= 0 || requiredMemorySize > 128) { // Max 128 bytes (16 * 8)
+                logger.error("Invalid memory size calculated: {} (must be > 0 and <= 128)", requiredMemorySize);
+                return ErrorCodes.ERROR_INVALID_PARAMETER;
+            }
+
+            // SECURITY FIX: Additional validation to ensure size fits in int for JNA
+            if (requiredMemorySize > Integer.MAX_VALUE) {
+                logger.error("Memory size exceeds int range: {}", requiredMemorySize);
+                return ErrorCodes.ERROR_INVALID_PARAMETER;
+            }
+
+            // Use managed memory to prevent leaks with strict bounds checking
+            return ResourceManager.withManagedMemory(requiredMemorySize, mask -> {
+                // Double-check memory bounds before writing
+                if (mask.size() < requiredMemorySize) {
+                    throw new IllegalStateException("Allocated memory size insufficient: " + mask.size() + " < " + requiredMemorySize);
+                }
+
+                // SECURITY FIX: Safe memory writes with comprehensive bounds validation
+                for (int i = 0; i < finalMaskLength; i++) {
+                    // SECURITY FIX: Protect against integer overflow in offset calculation
+                    final long offset;
+                    try {
+                        offset = Math.multiplyExact(i, 8L);
+                    } catch (ArithmeticException e) {
+                        logger.error("Integer overflow in memory offset calculation: {} * 8", i);
+                        throw new IllegalStateException("Memory offset calculation overflow", e);
+                    }
+
+                    // SECURITY FIX: Validate offset is within allocated memory bounds
+                    if (offset < 0 || offset >= requiredMemorySize) {
+                        logger.error("Memory offset out of bounds: {} (memory size: {})", offset, requiredMemorySize);
+                        throw new IllegalStateException("Memory offset out of bounds: " + offset);
+                    }
+
+                    if (i >= cpuMask.length) {
+                        // Zero-fill remaining slots instead of reading past array bounds
+                        mask.setLong(offset, 0L);
+                    } else {
+                        mask.setLong(offset, cpuMask[i]);
+                    }
                 }
 
                 int result = LinuxLibC.INSTANCE.sched_setaffinity((int) tid, (int) mask.size(), mask);
@@ -258,31 +310,62 @@ public class LinuxPlatformProvider implements PlatformProvider {
 
     @Override
     public int getThreadAffinity(long tid, long[] cpuMask, int maskLength) {
-        if (cpuMask == null || maskLength <= 0) {
+        // Enhanced input validation for memory safety
+        try {
+            InputValidator.validateThreadId(tid, "getThreadAffinity");
+            InputValidator.validateLongArray(cpuMask, "cpuMask", "getThreadAffinity");
+            InputValidator.validateRange(maskLength, 1, 16, "maskLength", "getThreadAffinity");
+        } catch (IllegalArgumentException e) {
+            logger.error("Input validation failed for getThreadAffinity: {}", e.getMessage());
             return ErrorCodes.ERROR_INVALID_PARAMETER;
         }
 
         try {
+            // Enhanced memory safety: strict bounds validation
+            final int finalMaskLength = Math.min(Math.min(maskLength, cpuMask.length), 16);
             if (maskLength > 16) {
-                logger.warn("CPU mask length {} exceeds maximum supported size", maskLength);
-                maskLength = 16;
+                logger.warn("CPU mask length {} exceeds maximum supported size, truncating to 16", maskLength);
+            }
+            if (finalMaskLength <= 0) {
+                logger.error("Invalid mask length after validation: {}", finalMaskLength);
+                return ErrorCodes.ERROR_INVALID_PARAMETER;
             }
 
-            Memory mask = new Memory(8L * maskLength);
+            // Calculate required memory size with safety checks
+            final long requiredMemorySize = 8L * finalMaskLength;
+            if (requiredMemorySize <= 0 || requiredMemorySize > 128) { // Max 128 bytes (16 * 8)
+                logger.error("Invalid memory size calculated: {}", requiredMemorySize);
+                return ErrorCodes.ERROR_INVALID_PARAMETER;
+            }
 
-            int result = LinuxLibC.INSTANCE.sched_getaffinity((int) tid, (int) mask.size(), mask);
-
-            if (result == 0) {
-                for (int i = 0; i < maskLength && i < cpuMask.length; i++) {
-                    cpuMask[i] = mask.getLong(i * 8L);
+            // Use managed memory to prevent leaks with strict bounds checking
+            return ResourceManager.withManagedMemory(requiredMemorySize, mask -> {
+                // Double-check memory bounds before system call
+                if (mask.size() < requiredMemorySize) {
+                    throw new IllegalStateException("Allocated memory size insufficient: " + mask.size() + " < " + requiredMemorySize);
                 }
-                logger.debug("Got thread {} affinity successfully", tid);
-                return ErrorCodes.SUCCESS;
-            } else {
-                int errno = Native.getLastError();
-                logger.debug("sched_getaffinity failed with errno {}", errno);
-                return mapErrnoToErrorCode(errno);
-            }
+
+                int result = LinuxLibC.INSTANCE.sched_getaffinity((int) tid, (int) mask.size(), mask);
+
+                if (result == 0) {
+                    // Safe memory reads with bounds validation
+                    for (int i = 0; i < finalMaskLength; i++) {
+                        if (i < cpuMask.length) {
+                            cpuMask[i] = mask.getLong(i * 8L);
+                        }
+                    }
+                    // Clear any remaining slots in the output array
+                    for (int i = finalMaskLength; i < cpuMask.length; i++) {
+                        cpuMask[i] = 0L;
+                    }
+                    logger.debug("Got thread {} affinity successfully", tid);
+                    return ErrorCodes.SUCCESS;
+                } else {
+                    int errno = Native.getLastError();
+                    logger.debug("sched_getaffinity failed with errno {}", errno);
+                    return mapErrnoToErrorCode(errno);
+                }
+            });
 
         } catch (Exception e) {
             logger.error("Exception in getThreadAffinity: {}", e.getMessage(), e);
@@ -1056,26 +1139,34 @@ public class LinuxPlatformProvider implements PlatformProvider {
         }
 
         try {
-            Memory attr = new Memory(104);
-            attr.clear();
+            // Use managed memory for perf_event_attr structure (104 bytes)
+            return ResourceManager.withManagedMemory(104L, attr -> {
+                // Validate memory allocation
+                if (attr.size() < 104) {
+                    throw new IllegalStateException("Insufficient memory allocated for perf_event_attr: " + attr.size());
+                }
 
-            attr.setInt(0, type);
-            attr.setInt(4, 8);
-            attr.setLong(8, config);
-            attr.setLong(24, 1);
-            attr.setLong(32, 1);
+                attr.clear();
 
-            int fd = LinuxLibC.INSTANCE.syscall(perfEventSyscallNumber, attr, pid, -1, -1, 0);
+                // Safely populate perf_event_attr structure with bounds checking
+                attr.setInt(0, type);      // type field
+                attr.setInt(4, 8);         // size field
+                attr.setLong(8, config);   // config field
+                attr.setLong(24, 1);       // disabled field
+                attr.setLong(32, 1);       // inherit field
 
-            if (fd < 0) {
-                int errno = Native.getLastError();
-                logger.debug("perf_event_open failed with errno {}", errno);
-                return null;
-            }
+                int fd = LinuxLibC.INSTANCE.syscall(perfEventSyscallNumber, attr, pid, -1, -1, 0);
 
-            String description = String.format("perf_%s_%d_pid_%d",
-                    type == PERF_TYPE_HARDWARE ? "hw" : "sw", config, pid);
-            return new PerfEventCounter(fd, description);
+                if (fd < 0) {
+                    int errno = Native.getLastError();
+                    logger.debug("perf_event_open failed with errno {}", errno);
+                    return null;
+                }
+
+                String description = String.format("perf_%s_%d_pid_%d",
+                        type == PERF_TYPE_HARDWARE ? "hw" : "sw", config, pid);
+                return new PerfEventCounter(fd, description);
+            });
 
         } catch (Exception e) {
             logger.debug("Failed to create perf counter: {}", e.getMessage());

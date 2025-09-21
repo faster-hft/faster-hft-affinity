@@ -2,6 +2,7 @@ package com.faster.affinity.performance;
 
 import com.faster.affinity.cache.HotPathCache;
 import com.faster.affinity.pool.ObjectPoolManager;
+import jdk.internal.vm.annotation.Contended;
 
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
@@ -10,19 +11,28 @@ import java.util.concurrent.atomic.LongAdder;
  * Performance profiler specifically designed for HFT optimization monitoring.
  * Tracks latency, throughput, and efficiency metrics for hot path operations.
  */
+@Contended
 public final class HFTPerformanceProfiler {
     // Logger removed - not used in performance-critical code
 
-    // Operation counters
+    // Operation counters - prevent false sharing with cache line isolation
+    @Contended("counters")
     private final LongAdder hotPathOperations = new LongAdder();
+    @Contended("counters")
     private final LongAdder fallbackOperations = new LongAdder();
+    @Contended("counters")
     private final LongAdder cacheHits = new LongAdder();
+    @Contended("counters")
     private final LongAdder cacheMisses = new LongAdder();
 
-    // Latency tracking (in nanoseconds)
+    // Latency tracking (in nanoseconds) - separate cache line group
+    @Contended("latency")
     private final AtomicLong totalHotPathLatency = new AtomicLong();
+    @Contended("latency")
     private final AtomicLong totalFallbackLatency = new AtomicLong();
+    @Contended("latency")
     private final AtomicLong minHotPathLatency = new AtomicLong(Long.MAX_VALUE);
+    @Contended("latency")
     private final AtomicLong maxHotPathLatency = new AtomicLong();
 
     // GC pressure indicators

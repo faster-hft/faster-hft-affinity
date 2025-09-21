@@ -27,7 +27,8 @@ public final class ResourceManager {
         private final long id;
         private volatile boolean closed = false;
 
-        private ManagedMemory(long size) {
+        private ManagedMemory(int size) {
+            // SECURITY FIX: Use int size parameter to prevent overflow in JNA Memory constructor
             this.memory = new Memory(size);
             this.id = allocationCounter.incrementAndGet();
 
@@ -84,16 +85,40 @@ public final class ResourceManager {
 
     /**
      * Allocate managed memory that will be automatically tracked.
+     * SECURITY FIX: Enhanced bounds checking and overflow protection.
      */
     public static ManagedMemory allocateMemory(long size) {
+        // SECURITY FIX: Comprehensive input validation to prevent integer overflow attacks
         if (size <= 0) {
-            throw new IllegalArgumentException("Memory size must be positive");
-        }
-        if (size > 1024 * 1024 * 1024) { // 1GB limit
-            throw new IllegalArgumentException("Memory size too large: " + size);
+            throw new IllegalArgumentException("Memory size must be positive, got: " + size);
         }
 
-        return new ManagedMemory(size);
+        // SECURITY FIX: Stricter size limits for HFT environment safety
+        final long MAX_MEMORY_SIZE = 128 * 1024; // 128KB limit for HFT operations
+        if (size > MAX_MEMORY_SIZE) {
+            throw new IllegalArgumentException("Memory size exceeds maximum allowed: " + size +
+                                             " > " + MAX_MEMORY_SIZE + " bytes");
+        }
+
+        // SECURITY FIX: Check for potential integer overflow in JNA Memory constructor
+        if (size > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Memory size exceeds JNA Memory constructor limit: " + size);
+        }
+
+        // SECURITY FIX: Validate size fits in int for JNA without overflow
+        int intSize;
+        try {
+            intSize = Math.toIntExact(size);
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException("Memory size cannot be safely converted to int: " + size, e);
+        }
+
+        // SECURITY FIX: Additional validation to prevent negative sizes after conversion
+        if (intSize <= 0) {
+            throw new IllegalArgumentException("Memory size invalid after conversion: " + intSize);
+        }
+
+        return new ManagedMemory(intSize);
     }
 
     /**
