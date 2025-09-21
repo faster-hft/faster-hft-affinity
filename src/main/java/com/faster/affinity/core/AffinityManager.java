@@ -28,8 +28,86 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Core affinity manager that orchestrates CPU affinity, NUMA, topology, and performance operations.
- * Thread-safe, production-ready implementation with proper error handling and caching.
+ * Core affinity manager providing ultra-low latency CPU affinity operations specifically
+ * optimized for high-frequency trading (HFT) applications. This is the primary entry point
+ * for hot-path operations requiring nanosecond-precision performance.
+ *
+ * <p>The AffinityManager implements a dual-tier architecture:
+ * <ul>
+ *   <li><strong>Hot-Path Operations</strong> - Lock-free, cache-optimized methods for trading loops</li>
+ *   <li><strong>Configuration Operations</strong> - Full-featured methods for setup and monitoring</li>
+ * </ul>
+ *
+ * <h3>Hot-Path Performance Characteristics</h3>
+ * <ul>
+ *   <li><strong>Target Latency:</strong> < 100 nanoseconds for cached operations</li>
+ *   <li><strong>Zero Allocation:</strong> Uses object pooling and pre-allocated structures</li>
+ *   <li><strong>Lock-Free:</strong> Wait-free algorithms for maximum concurrency</li>
+ *   <li><strong>Cache Optimized:</strong> Thread-local caching with configurable TTL</li>
+ * </ul>
+ *
+ * <h3>Usage Patterns</h3>
+ *
+ * <h4>HFT Trading Loop Integration</h4>
+ * <pre>{@code
+ * public class OrderProcessor {
+ *     private final AffinityManager hotPath = AffinityManager.getInstance();
+ *     private final BitSet tradingCores;
+ *
+ *     public void initializeTrading() {
+ *         // Configuration phase - use standard API
+ *         tradingCores = configureTradingCores();
+ *         setCurrentThreadAffinity(tradingCores);
+ *     }
+ *
+ *     @HotPath(targetLatencyNs = 500)
+ *     public void processOrder(Order order) {
+ *         // Verify thread placement (< 100ns cached lookup)
+ *         OperationResult<BitSet> affinity = hotPath.getCurrentThreadAffinityFast();
+ *         if (!tradingCores.equals(affinity.getValue())) {
+ *             // Emergency re-pin (rare occurrence)
+ *             hotPath.setCurrentThreadAffinityFast(Thread.currentThread().getId(), tradingCores);
+ *         }
+ *
+ *         // Process order with guaranteed CPU isolation
+ *         executeOrder(order);
+ *     }
+ * }
+ * }</pre>
+ *
+ * <h4>Market Data Handler</h4>
+ * <pre>{@code
+ * public class MarketDataHandler {
+ *     private final AffinityManager hotPath = AffinityManager.getInstance();
+ *
+ *     @HotPath(expectedFrequency = 100000, targetLatencyNs = 1000)
+ *     public void handleTick(MarketTick tick) {
+ *         // Ultra-fast affinity verification
+ *         if (hotPath.getCurrentThreadAffinityFast().isSuccess()) {
+ *             processTickData(tick);
+ *         }
+ *     }
+ * }
+ * }</pre>
+ *
+ * <p><strong>Singleton Pattern:</strong> Uses thread-safe singleton pattern optimized for
+ * high-frequency access. The singleton eliminates object creation overhead in hot paths.
+ *
+ * <p><strong>Error Handling:</strong> Hot-path methods use lightweight error handling that
+ * avoids exception overhead. All operations return {@link OperationResult} objects for
+ * fast success/failure determination.
+ *
+ * <p><strong>Thread Safety:</strong> All methods are thread-safe and designed for high
+ * concurrency. Lock-free algorithms ensure no thread blocking in hot-path operations.
+ *
+ * <p><strong>Performance Monitoring:</strong> Integrates with {@link HFTPerformanceProfiler}
+ * to provide real-time latency metrics without impacting hot-path performance.
+ *
+ * @author Amar Mond
+ * @since 1.0.0
+ * @version 1.0.0
+ * @see com.faster.affinity.core.LockFreeAffinityOperations
+ * @see com.faster.affinity.annotations.HotPath
  */
 public final class AffinityManager {
 

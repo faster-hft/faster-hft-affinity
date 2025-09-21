@@ -8,8 +8,102 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Configuration management for the affinity library.
- * Handles runtime configuration, feature toggles, and system-specific settings.
+ * Comprehensive configuration management for the Faster Thread Affinity Library,
+ * providing fine-grained control over performance characteristics, security settings,
+ * and feature enablement specifically optimized for high-frequency trading (HFT) applications.
+ *
+ * <p>This configuration class uses the Builder pattern to provide a fluent API for
+ * constructing library configurations. It supports a wide range of performance tuning
+ * options, from basic caching settings to advanced HFT optimizations like IRQ isolation
+ * and CPU governor control.
+ *
+ * <h3>Configuration Categories</h3>
+ *
+ * <h4>Performance Optimization</h4>
+ * <ul>
+ *   <li><strong>Caching</strong> - Operation result caching with configurable TTL</li>
+ *   <li><strong>Thread-Local Caching</strong> - Per-thread cache optimization</li>
+ *   <li><strong>Rate Limiting</strong> - DoS protection with configurable limits</li>
+ *   <li><strong>Timeouts</strong> - Operation timeout configuration</li>
+ * </ul>
+ *
+ * <h4>HFT-Specific Features</h4>
+ * <ul>
+ *   <li><strong>IRQ Management</strong> - Interrupt isolation for trading cores</li>
+ *   <li><strong>CPU Governor Control</strong> - Frequency scaling optimization</li>
+ *   <li><strong>NUMA Operations</strong> - Memory locality optimization</li>
+ *   <li><strong>Hugepage Management</strong> - TLB miss reduction</li>
+ * </ul>
+ *
+ * <h4>Development and Testing</h4>
+ * <ul>
+ *   <li><strong>Test Mode</strong> - Disables rate limiting for high-frequency tests</li>
+ *   <li><strong>Developer Mode</strong> - Enhanced logging and debugging features</li>
+ *   <li><strong>Parameter Validation</strong> - Input validation controls</li>
+ * </ul>
+ *
+ * <h3>Usage Examples</h3>
+ *
+ * <h4>Production HFT Configuration</h4>
+ * <pre>{@code
+ * AffinityConfig hftConfig = new AffinityConfig.Builder()
+ *     // Performance optimization
+ *     .enableCaching(true)                    // Cache operation results
+ *     .enableThreadLocalCaching(true)         // Thread-local optimization
+ *     .cacheExpiryMs(10000)                   // 10 second cache TTL
+ *     .operationTimeoutMs(500)                // Fast timeouts
+ *     .maxRetryAttempts(1)                    // Minimal retries for speed
+ *
+ *     // HFT-specific features
+ *     .enableNumaOperations(true)             // NUMA awareness
+ *     .enablePerformanceCounters(true)        // Real-time monitoring
+ *     .enableGovernorControl(true)            // CPU frequency control
+ *     .enableIRQManagement(true)              // Interrupt isolation
+ *     .enableHugepageManagement(true)         // Memory optimization
+ *
+ *     // Security and stability
+ *     .maxOperationsPerSecond(10000)          // High throughput limit
+ *     .maxBurstOperations(1000)               // Burst capacity
+ *     .validateParameters(true)               // Input validation
+ *
+ *     // Production settings
+ *     .developerMode(false)                   // Minimal logging
+ *     .testMode(false)                        // Enable rate limiting
+ *     .build();
+ * }</pre>
+ *
+ * <h4>Development Configuration</h4>
+ * <pre>{@code
+ * AffinityConfig devConfig = new AffinityConfig.Builder()
+ *     .developerMode(true)                    // Enhanced debugging
+ *     .enableCaching(false)                   // Disable for deterministic behavior
+ *     .validateParameters(true)               // Strict validation
+ *     .operationTimeoutMs(5000)               // Longer timeouts for debugging
+ *     .build();
+ * }</pre>
+ *
+ * <h4>Test Configuration</h4>
+ * <pre>{@code
+ * AffinityConfig testConfig = new AffinityConfig.Builder()
+ *     .testMode(true)                         // Disable rate limiting
+ *     .enableCaching(false)                   // Deterministic behavior
+ *     .developerMode(true)                    // Debug information
+ *     .validateParameters(false)              // Skip validation for speed
+ *     .maxRetryAttempts(0)                    // No retries in tests
+ *     .build();
+ * }</pre>
+ *
+ * <p><strong>Thread Safety:</strong> AffinityConfig instances are immutable once created.
+ * The Builder class is not thread-safe and should be used by a single thread.
+ *
+ * <p><strong>Performance Impact:</strong> Configuration choices directly impact library
+ * performance. For HFT applications, enable caching and disable extensive validation
+ * for optimal latency characteristics.
+ *
+ * @author Amar Mond
+ * @since 1.0.0
+ * @version 1.0.0
+ * @see Builder
  */
 public final class AffinityConfig {
     private static final Logger logger = LoggerFactory.getLogger(AffinityConfig.class);
