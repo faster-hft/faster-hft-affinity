@@ -189,14 +189,19 @@ public final class HotPathCache {
         public BitSet getCachedThreadAffinity(long threadId) {
             if (isThreadAffinityValid(threadId)) {
                 cacheHits++;
-                // CRITICAL FIX: Avoid allocation in hot path - copy to provided BitSet
+                // PERFORMANCE FIX: Use pre-allocated BitSet to avoid allocation in hot path
                 BitSet result = getTempBitSet2();
                 if (result != null) {
-                    copyBitsManually(lastThreadAffinity, result);
+                    // THREAD-SAFETY: Atomic copy operation to prevent partial reads
+                    synchronized (this.lastThreadAffinity) {
+                        copyBitsManually(lastThreadAffinity, result);
+                    }
                     return result;
                 }
                 // Fallback to clone if temp BitSet unavailable (rare case)
-                return (BitSet) lastThreadAffinity.clone();
+                synchronized (this.lastThreadAffinity) {
+                    return (BitSet) lastThreadAffinity.clone();
+                }
             }
             cacheMisses++;
             return null;
@@ -206,10 +211,13 @@ public final class HotPathCache {
          * Update cached thread affinity.
          */
         public void setCachedThreadAffinity(long threadId, BitSet affinity) {
-            this.lastThreadId.set(threadId);
-            this.lastThreadAffinity.clear();
-            if (affinity != null) {
-                copyBitsManually(affinity, this.lastThreadAffinity);
+            // THREAD-SAFETY: Atomic update operation
+            synchronized (this.lastThreadAffinity) {
+                this.lastThreadId.set(threadId);
+                this.lastThreadAffinity.clear();
+                if (affinity != null) {
+                    copyBitsManually(affinity, this.lastThreadAffinity);
+                }
             }
             updateValidation();
         }
@@ -227,14 +235,19 @@ public final class HotPathCache {
         public BitSet getCachedProcessAffinity(int processId) {
             if (isProcessAffinityValid(processId)) {
                 cacheHits++;
-                // CRITICAL FIX: Avoid allocation in hot path - copy to provided BitSet
+                // PERFORMANCE FIX: Use pre-allocated BitSet to avoid allocation in hot path
                 BitSet result = getTempBitSet();
                 if (result != null) {
-                    copyBitsManually(lastProcessAffinity, result);
+                    // THREAD-SAFETY: Atomic copy operation to prevent partial reads
+                    synchronized (this.lastProcessAffinity) {
+                        copyBitsManually(lastProcessAffinity, result);
+                    }
                     return result;
                 }
                 // Fallback to clone if temp BitSet unavailable (rare case)
-                return (BitSet) lastProcessAffinity.clone();
+                synchronized (this.lastProcessAffinity) {
+                    return (BitSet) lastProcessAffinity.clone();
+                }
             }
             cacheMisses++;
             return null;
@@ -244,10 +257,13 @@ public final class HotPathCache {
          * Update cached process affinity.
          */
         public void setCachedProcessAffinity(int processId, BitSet affinity) {
-            this.lastProcessId.set(processId);
-            this.lastProcessAffinity.clear();
-            if (affinity != null) {
-                copyBitsManually(affinity, this.lastProcessAffinity);
+            // THREAD-SAFETY: Atomic update operation
+            synchronized (this.lastProcessAffinity) {
+                this.lastProcessId.set(processId);
+                this.lastProcessAffinity.clear();
+                if (affinity != null) {
+                    copyBitsManually(affinity, this.lastProcessAffinity);
+                }
             }
             updateValidation();
         }

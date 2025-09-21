@@ -16,8 +16,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class ThreadLocalManager {
     private static final Logger logger = LoggerFactory.getLogger(ThreadLocalManager.class);
 
-    // Track all managed ThreadLocal instances for cleanup using strong references
-    private static final ConcurrentHashMap<String, ManagedThreadLocal<?>> managedThreadLocals
+    // MEMORY LEAK FIX: Track ThreadLocal instances using WeakReferences to prevent GC blocking
+    private static final ConcurrentHashMap<String, WeakReference<ManagedThreadLocal<?>>> managedThreadLocals
         = new ConcurrentHashMap<>();
 
     // Thread-safe cleanup coordination
@@ -68,15 +68,18 @@ public final class ThreadLocalManager {
             this.cleanupCallback = cleanupCallback;
 
             synchronized (cleanupLock) {
-                // Register for cleanup management using strong reference
-                ManagedThreadLocal<?> existing = managedThreadLocals.put(name, this);
+                // MEMORY LEAK FIX: Register using WeakReference to prevent GC blocking
+                WeakReference<ManagedThreadLocal<?>> existing = managedThreadLocals.put(name, new WeakReference<>(this));
                 if (existing != null) {
-                    logger.warn("Replacing existing ThreadLocal with name: {}", name);
-                    // Clean up the existing one
-                    try {
-                        existing.cleanup();
-                    } catch (Exception e) {
-                        logger.debug("Error cleaning up replaced ThreadLocal: {}", e.getMessage());
+                    ManagedThreadLocal<?> existingThreadLocal = existing.get();
+                    if (existingThreadLocal != null) {
+                        logger.warn("Replacing existing ThreadLocal with name: {}", name);
+                        // Clean up the existing one
+                        try {
+                            existingThreadLocal.cleanup();
+                        } catch (Exception e) {
+                            logger.debug("Error cleaning up replaced ThreadLocal: {}", e.getMessage());
+                        }
                     }
                 }
                 totalCreated.incrementAndGet();
@@ -139,8 +142,11 @@ public final class ThreadLocalManager {
                         }
 
                         this.remove();
-                        // Remove from global tracking
-                        managedThreadLocals.remove(name, this);
+                        // MEMORY LEAK FIX: Remove WeakReference from global tracking
+                        WeakReference<ManagedThreadLocal<?>> ref = managedThreadLocals.get(name);
+                        if (ref != null && ref.get() == this) {
+                            managedThreadLocals.remove(name, ref);
+                        }
                         totalCleaned.incrementAndGet();
                         logger.debug("Cleaned ThreadLocal: {} (accessed {} times, total cleaned: {})",
                                    name, accessCount.get(), totalCleaned.get());
@@ -227,10 +233,17 @@ public final class ThreadLocalManager {
         }
 
         synchronized (cleanupLock) {
-            ManagedThreadLocal<?> threadLocal = managedThreadLocals.get(name);
-            if (threadLocal != null) {
-                threadLocal.cleanup();
-                return true;
+            // MEMORY LEAK FIX: Handle WeakReference access
+            WeakReference<ManagedThreadLocal<?>> ref = managedThreadLocals.get(name);
+            if (ref != null) {
+                ManagedThreadLocal<?> threadLocal = ref.get();
+                if (threadLocal != null) {
+                    threadLocal.cleanup();
+                    return true;
+                } else {
+                    // ThreadLocal was garbage collected - remove stale reference
+                    managedThreadLocals.remove(name, ref);
+                }
             }
             return false;
         }
@@ -246,20 +259,35 @@ public final class ThreadLocalManager {
 
             synchronized (cleanupLock) {
                 int cleanedCount = 0;
-                for (ManagedThreadLocal<?> threadLocal : managedThreadLocals.values()) {
-                    try {
-                        if (!threadLocal.isCleaned()) {
-                            threadLocal.cleanup();
-                            cleanedCount++;
+                int staleReferencesRemoved = 0;
+
+                // MEMORY LEAK FIX: Iterate over WeakReferences and handle stale references
+                java.util.Iterator<java.util.Map.Entry<String, WeakReference<ManagedThreadLocal<?>>>> iterator
+                    = managedThreadLocals.entrySet().iterator();
+
+                while (iterator.hasNext()) {
+                    java.util.Map.Entry<String, WeakReference<ManagedThreadLocal<?>>> entry = iterator.next();
+                    WeakReference<ManagedThreadLocal<?>> ref = entry.getValue();
+                    ManagedThreadLocal<?> threadLocal = ref.get();
+
+                    if (threadLocal != null) {
+                        try {
+                            if (!threadLocal.isCleaned()) {
+                                threadLocal.cleanup();
+                                cleanedCount++;
+                            }
+                        } catch (Exception e) {
+                            logger.warn("Error cleaning up ThreadLocal {}: {}", threadLocal.getName(), e.getMessage());
                         }
-                    } catch (Exception e) {
-                        logger.warn("Error cleaning up ThreadLocal {}: {}", threadLocal.getName(), e.getMessage());
+                    } else {
+                        // Remove stale WeakReference
+                        staleReferencesRemoved++;
                     }
+                    iterator.remove(); // Remove from map regardless
                 }
 
-                managedThreadLocals.clear();
-                logger.info("ThreadLocal cleanup completed. Cleaned {} instances, total created: {}, total cleaned: {}",
-                           cleanedCount, totalCreated.get(), totalCleaned.get());
+                logger.info("ThreadLocal cleanup completed. Cleaned {} instances, removed {} stale references, total created: {}, total cleaned: {}",
+                           cleanedCount, staleReferencesRemoved, totalCreated.get(), totalCleaned.get());
             }
         }
     }
@@ -278,7 +306,14 @@ public final class ThreadLocalManager {
      */
     public static ThreadLocalStats getStats() {
         synchronized (cleanupLock) {
-            int activeCount = managedThreadLocals.size();
+            // MEMORY LEAK FIX: Count only active (non-null) ThreadLocal instances
+            int activeCount = 0;
+            for (WeakReference<ManagedThreadLocal<?>> ref : managedThreadLocals.values()) {
+                if (ref.get() != null) {
+                    activeCount++;
+                }
+            }
+
             long totalCreatedCount = totalCreated.get();
             long totalCleanedCount = totalCleaned.get();
 
@@ -293,8 +328,13 @@ public final class ThreadLocalManager {
         if (name == null) {
             return false;
         }
-        ManagedThreadLocal<?> threadLocal = managedThreadLocals.get(name);
-        return threadLocal != null && !threadLocal.isCleaned();
+        // MEMORY LEAK FIX: Handle WeakReference access
+        WeakReference<ManagedThreadLocal<?>> ref = managedThreadLocals.get(name);
+        if (ref != null) {
+            ManagedThreadLocal<?> threadLocal = ref.get();
+            return threadLocal != null && !threadLocal.isCleaned();
+        }
+        return false;
     }
 
     /**
@@ -337,10 +377,21 @@ public final class ThreadLocalManager {
     public static void cleanupCurrentThread() {
         synchronized (cleanupLock) {
             int cleaned = 0;
-            for (ManagedThreadLocal<?> threadLocal : managedThreadLocals.values()) {
+            // MEMORY LEAK FIX: Handle WeakReference access and cleanup stale references
+            java.util.Iterator<java.util.Map.Entry<String, WeakReference<ManagedThreadLocal<?>>>> iterator
+                = managedThreadLocals.entrySet().iterator();
+
+            while (iterator.hasNext()) {
+                java.util.Map.Entry<String, WeakReference<ManagedThreadLocal<?>>> entry = iterator.next();
+                WeakReference<ManagedThreadLocal<?>> ref = entry.getValue();
+                ManagedThreadLocal<?> threadLocal = ref.get();
+
                 if (threadLocal != null && !threadLocal.isCleaned()) {
                     threadLocal.remove(); // Remove value for current thread only
                     cleaned++;
+                } else if (threadLocal == null) {
+                    // Remove stale WeakReference
+                    iterator.remove();
                 }
             }
 
@@ -362,9 +413,10 @@ public final class ThreadLocalManager {
                        "(potential memory leak)", stats.getActiveCount());
         }
 
-        // Check for ThreadLocal instances with very high access counts (potential hotspots)
+        // MEMORY LEAK FIX: Check for ThreadLocal instances with very high access counts (potential hotspots)
         synchronized (cleanupLock) {
-            for (ManagedThreadLocal<?> threadLocal : managedThreadLocals.values()) {
+            for (WeakReference<ManagedThreadLocal<?>> ref : managedThreadLocals.values()) {
+                ManagedThreadLocal<?> threadLocal = ref.get();
                 if (threadLocal != null && threadLocal.getAccessCount() > 100000) {
                     logger.warn("ThreadLocal with very high access count: {} ({})",
                                threadLocal.getName(), threadLocal.getAccessCount());
@@ -373,5 +425,29 @@ public final class ThreadLocalManager {
         }
 
         logger.debug("ThreadLocal leak check complete: {}", stats);
+    }
+
+    /**
+     * MEMORY LEAK FIX: Periodic cleanup of stale WeakReferences.
+     * Should be called periodically to prevent accumulation of dead references.
+     */
+    public static void cleanupStaleReferences() {
+        synchronized (cleanupLock) {
+            int removed = 0;
+            java.util.Iterator<java.util.Map.Entry<String, WeakReference<ManagedThreadLocal<?>>>> iterator
+                = managedThreadLocals.entrySet().iterator();
+
+            while (iterator.hasNext()) {
+                java.util.Map.Entry<String, WeakReference<ManagedThreadLocal<?>>> entry = iterator.next();
+                if (entry.getValue().get() == null) {
+                    iterator.remove();
+                    removed++;
+                }
+            }
+
+            if (removed > 0) {
+                logger.debug("Cleaned up {} stale ThreadLocal references", removed);
+            }
+        }
     }
 }

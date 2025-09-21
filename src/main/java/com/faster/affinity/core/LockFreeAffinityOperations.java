@@ -43,6 +43,11 @@ public final class LockFreeAffinityOperations {
      */
     @HotPath(value = "Lock-free current thread affinity query", expectedFrequency = 1000000, targetLatencyNs = 100)
     public OperationResult<BitSet> getCurrentThreadAffinityFast() {
+        // NULL SAFETY FIX: Check platform provider before use to prevent NPE
+        if (platformProvider == null) {
+            return OperationResult.systemCallFailure();
+        }
+
         // BRANCH PREDICTION OPTIMIZATION: Assume provider is always valid (common case)
         // This structures the code so the CPU predicts the normal path correctly
         long threadId = platformProvider.getCurrentThreadId();
@@ -83,6 +88,11 @@ public final class LockFreeAffinityOperations {
      */
     @HotPath(value = "Lock-free current thread affinity update", expectedFrequency = 100000, targetLatencyNs = 200)
     public OperationResult<Void> setCurrentThreadAffinityFast(BitSet cpuMask) {
+        // NULL SAFETY FIX: Check platform provider before use to prevent NPE
+        if (platformProvider == null) {
+            return OperationResult.systemCallFailure();
+        }
+
         // BRANCH PREDICTION OPTIMIZATION: Validate cpuMask first (most common failure)
         if (cpuMask != null && !cpuMask.isEmpty()) {
             long threadId = platformProvider.getCurrentThreadId();
@@ -101,6 +111,11 @@ public final class LockFreeAffinityOperations {
      */
     @HotPath(value = "Lock-free thread affinity update", expectedFrequency = 50000, targetLatencyNs = 250)
     public OperationResult<Void> setThreadAffinityFast(long threadId, BitSet cpuMask) {
+        // NULL SAFETY FIX: Check platform provider before use to prevent NPE
+        if (platformProvider == null) {
+            return OperationResult.systemCallFailure();
+        }
+
         // BRANCH PREDICTION OPTIMIZATION: Structure for success path prediction
         // Get thread-local cache (common case: cache is available)
         HotPathCache.AffinityCache cache = hotPathCache.getAffinityCache();
@@ -132,6 +147,11 @@ public final class LockFreeAffinityOperations {
      */
     @HotPath(value = "Bulk thread affinity operations", expectedFrequency = 10000, targetLatencyNs = 500)
     public int setBulkThreadAffinity(long[] threadIds, BitSet cpuMask) {
+        // NULL SAFETY FIX: Check platform provider before use to prevent NPE
+        if (platformProvider == null) {
+            return 0;
+        }
+
         // BRANCH PREDICTION OPTIMIZATION: Structure for common success case
         // Assume valid inputs and available cache (normal operation)
         if (threadIds != null && threadIds.length > 0 && cpuMask != null && !cpuMask.isEmpty()) {
