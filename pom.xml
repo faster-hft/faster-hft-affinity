@@ -12,7 +12,7 @@
 
     <name>HFT Affinity Library</name>
     <description>Production-ready CPU affinity, NUMA, and performance monitoring library for high-frequency trading systems</description>
-    <url>https://github.com/your-org/affinity-library</url>
+    <url>https://github.com/faster-hft/faster-thread-affinity</url>
 
     <properties>
         <!-- Java version -->
@@ -690,8 +690,8 @@
 
     <!-- SCM -->
     <scm>
-        <connection>scm:git:git://github.com/your-org/affinity-library.git</connection>
-        <developerConnection>scm:git:ssh://github.com:your-org/affinity-library.git</developerConnection>
-        <url>https://github.com/your-org/affinity-library/tree/main</url>
+        <connection>scm:git:git://github.com/faster-hft/faster-thread-affinity.git</connection>
+        <developerConnection>scm:git:ssh://github.com:faster-hft/faster-thread-affinity.git</developerConnection>
+        <url>https://github.com/faster-hft/faster-thread-affinity/tree/main</url>
     </scm>
 </project>

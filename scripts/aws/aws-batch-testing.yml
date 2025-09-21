@@ -305,9 +305,9 @@ Resources:
 
             # Download project
             cd /tmp
-            git clone https://github.com/your-org/faster-thread-affinity.git || {
+            git clone https://github.com/faster-hft/faster-thread-affinity.git || {
                 echo "Repository not available, using pre-uploaded JAR"
-                wget -O affinity-library.jar "https://github.com/your-org/faster-thread-affinity/releases/latest/download/affinity-library-1.0.0-jar-with-dependencies.jar"
+                wget -O affinity-library.jar "https://github.com/faster-hft/faster-thread-affinity/releases/latest/download/affinity-library-1.0.0-jar-with-dependencies.jar"
             }
 
             if [[ -d faster-thread-affinity ]]; then
