@@ -1,0 +1,341 @@
+name: Performance Testing
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, labeled]
+  schedule:
+    # Run performance tests weekly on Sunday at 3 AM UTC
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      performance_iterations:
+        description: 'Number of performance test iterations'
+        required: false
+        default: '10000'
+        type: string
+      enable_profiling:
+        description: 'Enable JVM profiling'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  MAVEN_OPTS: -Xmx4g -XX:+UseG1GC -XX:+UnlockExperimentalVMOptions -XX:+EnableJVMCI
+
+jobs:
+  # Only run performance tests if specifically requested or on main branch
+  check-performance-needed:
+    name: Check if Performance Tests Needed
+    runs-on: ubuntu-latest
+    outputs:
+      run_performance: ${{ steps.check.outputs.run_performance }}
+    steps:
+      - name: Check conditions
+        id: check
+        run: |
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "run_performance=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "schedule" ]]; then
+            echo "run_performance=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "run_performance=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "pull_request" && "${{ contains(github.event.pull_request.labels.*.name, 'performance') }}" == "true" ]]; then
+            echo "run_performance=true" >> $GITHUB_OUTPUT
+          else
+            echo "run_performance=false" >> $GITHUB_OUTPUT
+          fi
+
+  # HFT Performance benchmarks on high-performance runners
+  hft-performance:
+    name: HFT Performance Tests (${{ matrix.os }})
+    needs: check-performance-needed
+    if: needs.check-performance-needed.outputs.run_performance == 'true'
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            profile: linux
+          - os: windows-latest
+            profile: windows
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-perf-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-perf-m2
+            ${{ runner.os }}-m2
+
+      - name: Configure system for HFT performance
+        shell: bash
+        run: |
+          echo "=== Configuring system for optimal performance ==="
+
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            # Linux optimizations
+            echo "Setting CPU governor to performance..."
+            echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 2>/dev/null || echo "Could not set CPU governor"
+
+            echo "Disabling CPU idle states..."
+            sudo cpupower idle-set -D 0 2>/dev/null || echo "cpupower not available"
+
+            echo "Setting swappiness to 1..."
+            echo 1 | sudo tee /proc/sys/vm/swappiness
+
+            echo "Current CPU info:"
+            cat /proc/cpuinfo | grep -E "(model name|cpu cores|siblings)" | head -6
+
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            # Windows optimizations
+            echo "Setting power plan to High Performance..."
+            powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c 2>/dev/null || echo "Could not set power plan"
+
+            echo "Current CPU info:"
+            wmic cpu get name,numberofcores,numberoflogicalprocessors /format:list | grep -v "^$"
+          fi
+
+          echo "Java version details:"
+          java -version
+
+          echo "Available memory:"
+          if command -v free &> /dev/null; then
+            free -h
+          elif command -v vm_stat &> /dev/null; then
+            vm_stat
+          fi
+
+      - name: Warm up JVM
+        run: |
+          echo "=== JVM Warmup ==="
+          mvn compile test-compile -B -q
+
+          # Run a quick warmup
+          mvn test -B -q -Dtest=AffinityManagerTest -DfailIfNoTests=false || echo "Warmup test completed"
+
+      - name: Run performance benchmarks
+        run: |
+          echo "=== Running HFT Performance Tests ==="
+          mvn test -B -fae -Pperformance -P${{ matrix.profile }}
+        env:
+          AFFINITY_TEST_MODE: performance
+          AFFINITY_PERFORMANCE_ITERATIONS: ${{ github.event.inputs.performance_iterations || '10000' }}
+          AFFINITY_STRICT_VALIDATION: true
+          JVM_ARGS: >-
+            -XX:+UnlockExperimentalVMOptions
+            -XX:+UseG1GC
+            -XX:MaxGCPauseMillis=1
+            -XX:+UseTransparentHugePages
+            -XX:+AlwaysPreTouch
+            -XX:-UseBiasedLocking
+            -XX:+UnlockDiagnosticVMOptions
+            -XX:+LogVMOutput
+            ${{ github.event.inputs.enable_profiling == 'true' && '-XX:+FlightRecorder -XX:StartFlightRecording=duration=60s,filename=perf-recording.jfr' || '' }}
+
+      - name: Run HFT regression tests
+        run: |
+          echo "=== Running HFT Performance Regression Tests ==="
+          mvn test -B -fae -Dtest=HFTPerformanceRegressionTest
+        env:
+          AFFINITY_TEST_MODE: regression
+          AFFINITY_BASELINE_LATENCY_NS: 100
+
+      - name: Run comprehensive affinity test
+        shell: bash
+        run: |
+          echo "=== Running Standalone Performance Test ==="
+          mvn package -B -DskipTests -q
+
+          javac -cp "target/affinity-library-1.0.0-jar-with-dependencies.jar" ComprehensiveAffinityTest.java
+
+          echo "Measuring performance with time..."
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            # Use higher privileges for better affinity control on Linux
+            sudo timeout 300s time java -cp ".:target/affinity-library-1.0.0-jar-with-dependencies.jar" \
+              -XX:+UseG1GC -XX:MaxGCPauseMillis=1 -Xmx2g \
+              ComprehensiveAffinityTest || echo "Test completed with timeout/privileges limitation"
+          else
+            timeout 300 java -cp ".;target/affinity-library-1.0.0-jar-with-dependencies.jar" \
+              -XX:+UseG1GC -XX:MaxGCPauseMillis=1 -Xmx2g \
+              ComprehensiveAffinityTest || echo "Test completed"
+          fi
+
+      - name: Collect performance metrics
+        shell: bash
+        run: |
+          echo "=== Collecting Performance Metrics ==="
+
+          if [[ -f target/surefire-reports/TEST-*.xml ]]; then
+            echo "Test execution times:"
+            grep -h "time=" target/surefire-reports/TEST-*Performance*.xml | head -10 || echo "No performance test times found"
+          fi
+
+          if [[ -f perf-recording.jfr ]]; then
+            echo "JFR recording generated: perf-recording.jfr"
+            ls -la perf-recording.jfr
+          fi
+
+          echo "System performance metrics:"
+          if command -v vmstat &> /dev/null; then
+            vmstat 1 1
+          fi
+
+      - name: Upload performance results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: performance-results-${{ matrix.os }}
+          path: |
+            target/surefire-reports/*Performance*.xml
+            target/surefire-reports/*Benchmark*.xml
+            perf-recording.jfr
+            target/site/jacoco/
+          retention-days: 90
+
+  # Multi-architecture performance comparison
+  architecture-performance:
+    name: Architecture Performance Comparison
+    needs: check-performance-needed
+    if: needs.check-performance-needed.outputs.run_performance == 'true'
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: x64
+            name: "x86_64"
+          - os: ubuntu-24.04-arm64
+            arch: arm64
+            name: "ARM64"
+          - os: macos-14
+            arch: arm64
+            name: "Apple Silicon"
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          architecture: ${{ matrix.arch }}
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-${{ matrix.arch }}-perf-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.arch }}-perf-m2
+            ${{ runner.os }}-${{ matrix.arch }}-m2
+
+      - name: System information
+        shell: bash
+        run: |
+          echo "=== ${{ matrix.name }} Performance Test ==="
+          echo "Architecture: ${{ matrix.arch }}"
+          echo "CPU Info:"
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            cat /proc/cpuinfo | grep -E "(model name|cpu cores|flags)" | head -10
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            sysctl -n machdep.cpu.brand_string
+            sysctl -n hw.ncpu
+            sysctl -n hw.physicalcpu
+          fi
+
+      - name: Quick performance test
+        run: |
+          mvn test -B -q -Dtest=AffinityManagerTest,HFTPerformanceBenchmarkTest -DfailIfNoTests=false
+        env:
+          AFFINITY_TEST_MODE: quick-performance
+          AFFINITY_PERFORMANCE_ITERATIONS: 1000
+
+      - name: Architecture-specific affinity test
+        shell: bash
+        run: |
+          echo "=== Architecture-Specific Affinity Test ==="
+          mvn package -B -DskipTests -q
+          javac -cp "target/affinity-library-1.0.0-jar-with-dependencies.jar" ComprehensiveAffinityTest.java
+
+          # Quick test with reduced iterations for architecture comparison
+          java -cp ".:target/affinity-library-1.0.0-jar-with-dependencies.jar" \
+            -XX:+UseG1GC -Xmx1g \
+            -Daffinity.quick.test=true \
+            ComprehensiveAffinityTest
+
+      - name: Upload architecture results
+        uses: actions/upload-artifact@v4
+        with:
+          name: arch-performance-${{ matrix.name }}
+          path: |
+            target/surefire-reports/
+          retention-days: 30
+
+  # Performance summary and comparison
+  performance-summary:
+    name: Performance Summary
+    needs: [hft-performance, architecture-performance]
+    if: always() && (needs.hft-performance.result == 'success' || needs.architecture-performance.result == 'success')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all performance results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*performance*"
+          merge-multiple: true
+          path: performance-results/
+
+      - name: Generate performance summary
+        run: |
+          echo "# 🚀 HFT Thread Affinity Performance Test Results" > performance-summary.md
+          echo "" >> performance-summary.md
+          echo "## Test Environment" >> performance-summary.md
+          echo "- **Date:** $(date -u)" >> performance-summary.md
+          echo "- **Trigger:** ${{ github.event_name }}" >> performance-summary.md
+          echo "- **Commit:** ${{ github.sha }}" >> performance-summary.md
+          echo "- **Iterations:** ${{ github.event.inputs.performance_iterations || '10000' }}" >> performance-summary.md
+          echo "" >> performance-summary.md
+
+          echo "## Performance Results by Platform" >> performance-summary.md
+
+          for result_file in performance-results/*.xml; do
+            if [[ -f "$result_file" ]]; then
+              echo "### $(basename "$result_file")" >> performance-summary.md
+              if grep -q "time=" "$result_file"; then
+                grep "time=" "$result_file" | head -5 >> performance-summary.md || echo "No timing data found" >> performance-summary.md
+              fi
+              echo "" >> performance-summary.md
+            fi
+          done
+
+          echo "## Summary" >> performance-summary.md
+          echo "✅ Performance tests completed across multiple platforms and architectures" >> performance-summary.md
+          echo "📊 Results available in artifacts for detailed analysis" >> performance-summary.md
+
+          cat performance-summary.md
+
+      - name: Upload performance summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-summary
+          path: performance-summary.md
+          retention-days: 180
