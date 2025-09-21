@@ -24,6 +24,10 @@ public class PlatformProviderFactory {
                 return new LinuxPlatformProvider(config);
             } else {
                 logger.warn("Unknown platform {}, no provider available", OS_NAME);
+                if (config.isDeveloperMode()) {
+                    logger.info("Developer mode enabled, creating mock provider for unsupported platform: {}", OS_NAME);
+                    return new MockPlatformProvider(config);
+                }
                 throw new UnsupportedOperationException("Platform not supported: " + OS_NAME);
             }
         } catch (Exception e) {

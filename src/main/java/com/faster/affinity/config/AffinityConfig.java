@@ -187,7 +187,8 @@ public final class AffinityConfig {
                         .validateParameters(getBooleanProperty(props, "affinity.validation.enabled", DEFAULT_VALIDATE_PARAMETERS))
                         .enableCaching(getBooleanProperty(props, "affinity.cache.enabled", DEFAULT_ENABLE_CACHING))
                         .cacheExpiryMs(getLongProperty(props, "affinity.cache.expiry_ms", DEFAULT_CACHE_EXPIRY_MS))
-                        .developerMode(getBooleanProperty(props, "affinity.developer.mode", DEFAULT_DEVELOPER_MODE))
+                        .developerMode(getBooleanProperty(props, "affinity.developer.mode",
+                            getBooleanEnvironmentVariable("AFFINITY_DEVELOPER_MODE", DEFAULT_DEVELOPER_MODE)))
                         .logLevel(props.getProperty("affinity.log.level", "INFO"))
                         .enableThreadLocalCaching(getBooleanProperty(props, "affinity.cache.thread_local", true))
                         .performanceCounterUpdateIntervalMs(getIntProperty(props, "affinity.performance.update_interval_ms", 100))
@@ -243,6 +244,15 @@ public final class AffinityConfig {
             logger.warn("Invalid long value for {}: {}, using default: {}", key, value, defaultValue);
             return defaultValue;
         }
+    }
+
+    private static boolean getBooleanEnvironmentVariable(String envVar, boolean defaultValue) {
+        String value = System.getenv(envVar);
+        if (value != null) {
+            logger.info("Using environment variable {}={}", envVar, value);
+            return Boolean.parseBoolean(value);
+        }
+        return defaultValue;
     }
 
     // Getters
