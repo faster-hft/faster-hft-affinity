@@ -4,7 +4,7 @@ description: "Ultra-low latency thread affinity library for high-frequency tradi
 author: "Amar Mond"
 email: ""
 baseurl: "/faster-thread-affinity"
-url: "https://github.com/faster/faster-thread-affinity"
+url: "https://amarmond.github.io"
 
 # Build settings
 markdown: kramdown
@@ -69,5 +69,5 @@ social:
     - "https://github.com/faster/faster-thread-affinity"
 
 # GitHub Pages specific
-github_username: faster
-repository: faster/faster-thread-affinity
+github_username: amarmond
+repository: amarmond/faster-thread-affinity
