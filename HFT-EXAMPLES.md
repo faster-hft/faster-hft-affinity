@@ -22,6 +22,124 @@ This guide provides complete, production-ready implementations of HFT systems us
 
 ---
 
+## 🚀 Hot-Path Optimization Patterns
+
+### Two-Tier API Design in Practice
+
+The library provides two distinct API layers for optimal performance:
+
+```java
+public class HFTSystemWithTwoTierAPI {
+    private final AffinityLibrary configAPI;
+    private final AffinityManager hotPath;
+
+    public void initialize() {
+        // Configuration Phase - Use Standard API
+        AffinityConfig config = new AffinityConfig.Builder()
+            .enableCaching(true)
+            .enableThreadLocalCaching(true)
+            .testMode(false) // Enable production features
+            .build();
+
+        this.configAPI = AffinityLibraryFactory.create(config);
+        this.hotPath = AffinityManager.getInstance();
+
+        // Setup phase - higher latency acceptable
+        BitSet tradingCpus = new BitSet();
+        tradingCpus.set(2, 6); // CPUs 2-5 for trading threads
+        configAPI.setCurrentThreadAffinity(tradingCpus);
+
+        // Warm up caches
+        warmUpHotPath();
+    }
+
+    @HotPath(expectedFrequency = 1000000, targetLatencyNs = 100)
+    public void criticalTradingPath() {
+        // Hot-Path Phase - Ultra-fast operations
+        // < 100ns latency for cached queries
+        OperationResult<BitSet> affinity = hotPath.getCurrentThreadAffinityFast();
+
+        // Zero-allocation operations using object pools
+        try (PooledBitSet pooledMask = PooledBitSet.acquire()) {
+            pooledMask.set(2, 6); // CPUs 2-5
+            hotPath.setThreadAffinityFast(Thread.currentThread().getId(), pooledMask);
+            // Automatically returned to pool
+        }
+    }
+
+    private void warmUpHotPath() {
+        // Populate caches during startup
+        for (int i = 0; i < 1000; i++) {
+            hotPath.getCurrentThreadAffinityFast();
+        }
+    }
+}
+```
+
+### @HotPath Annotations for Performance Monitoring
+
+```java
+public class PerformanceCriticalTradingEngine {
+
+    @HotPath(expectedFrequency = 1000000, targetLatencyNs = 500)
+    public void processOrder(Order order) {
+        // Ultra-low latency order processing
+        AffinityManager hotPath = AffinityManager.getInstance();
+        OperationResult<BitSet> affinity = hotPath.getCurrentThreadAffinityFast();
+
+        // Process with guaranteed CPU isolation
+        executeOrder(order);
+    }
+
+    @HotPath(targetLatencyNs = 200)
+    public void handleMarketUpdate(MarketData data) {
+        // Minimal overhead market data processing
+        parseAndDistribute(data);
+    }
+
+    @HotPath(expectedFrequency = 500000, targetLatencyNs = 100)
+    public void performRiskCheck(Order order) {
+        // Ultra-fast risk validation
+        validateRisk(order);
+    }
+}
+```
+
+### Object Pooling for Zero-Allocation
+
+```java
+public class ZeroAllocationTradingSystem {
+
+    public void processOrdersWithPooling() {
+        // Zero-allocation operations using object pools
+        try (PooledBitSet pooledMask = PooledBitSet.acquire()) {
+            pooledMask.set(2, 6); // Set CPUs 2-5
+
+            AffinityManager hotPath = AffinityManager.getInstance();
+            hotPath.setThreadAffinityFast(Thread.currentThread().getId(), pooledMask);
+
+            // Process orders with optimal CPU assignment
+            processOrderBatch();
+
+            // pooledMask automatically returned to pool
+        }
+    }
+
+    public void monitorObjectPools() {
+        // Check pool statistics for optimal performance
+        ObjectPoolStats poolStats = ObjectPoolManager.getStats();
+
+        System.out.println("Pool efficiency: " + poolStats.getHitRate());
+        System.out.println("Leaked objects: " + poolStats.getLeakedObjects());
+
+        if (poolStats.getHitRate() < 0.95) {
+            // Consider increasing pool size
+            ObjectPoolManager.resizePool(PooledBitSet.class, 1000);
+        }
+    }
+}
+```
+
 ## 📊 Market Data Processing System
 
 ### 1. Multi-Feed Market Data Processor

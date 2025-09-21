@@ -600,6 +600,112 @@ if (numaBuffer.isFailure()) {
 }
 ```
 
+## 🔐 Security Features
+
+The library includes comprehensive security features designed for production HFT environments:
+
+### Input Validation
+
+All API calls undergo rigorous validation to prevent malicious or malformed input:
+
+```java
+// Comprehensive parameter validation
+public class SecurityValidation {
+    public static void validateCpuMask(BitSet cpuMask) {
+        if (cpuMask == null) {
+            throw new SecurityException("CPU mask cannot be null");
+        }
+
+        if (cpuMask.cardinality() > MAX_CPU_COUNT) {
+            throw new SecurityException("CPU mask exceeds system limits");
+        }
+
+        // Validate against system capabilities
+        SystemCapabilities caps = getSystemCapabilities();
+        if (!caps.isValidCpuMask(cpuMask)) {
+            throw new SecurityException("Invalid CPU mask for current system");
+        }
+    }
+}
+```
+
+### Rate Limiting
+
+Token bucket algorithm protects against API abuse and system overload:
+
+```java
+AffinityConfig secureConfig = new AffinityConfig.Builder()
+    .testMode(false) // Enable rate limiting in production
+    .maxOperationsPerSecond(1000) // Reasonable limit
+    .enableRateLimiting(true)
+    .tokenBucketCapacity(100)
+    .build();
+
+// Rate limiting is automatically enforced
+try {
+    library.setCurrentThreadAffinity(cpuMask);
+} catch (RateLimitExceededException e) {
+    // Handle rate limit violation
+    handleRateLimit(e);
+}
+```
+
+### Audit Logging
+
+Security event tracking for compliance and monitoring:
+
+```java
+AffinityConfig auditConfig = new AffinityConfig.Builder()
+    .enableAuditLogging(true)
+    .auditLogLevel(AuditLevel.FULL)
+    .auditDestination("/var/log/affinity-audit.log")
+    .build();
+
+// All operations are automatically logged
+library.setCurrentThreadAffinity(cpuMask);
+// Logs: [2025-09-21 16:30:45] USER:admin OPERATION:setAffinity CPU_MASK:0-3 RESULT:SUCCESS
+```
+
+### Privilege Validation
+
+Safe handling of elevated privileges with automatic validation:
+
+```java
+// Check privileges before attempting operations
+if (!library.hasRequiredPrivileges()) {
+    throw new SecurityException("Insufficient privileges for CPU affinity operations");
+}
+
+// Safe privilege elevation when needed
+try {
+    library.requestElevatedPrivileges();
+    // Perform privileged operations
+    library.setRealtimePriority(RealtimePriority.HIGH);
+} finally {
+    library.dropElevatedPrivileges();
+}
+```
+
+### Security Monitoring
+
+Real-time security event monitoring and alerting:
+
+```java
+SecurityMonitor secMonitor = library.getSecurityMonitor();
+
+// Register security event handlers
+secMonitor.onSecurityViolation(event -> {
+    if (event.getSeverity() == SecuritySeverity.HIGH) {
+        alertSecurityTeam(event);
+        // Temporarily disable operations if needed
+        library.enableSafeMode();
+    }
+});
+
+// Monitor for suspicious patterns
+secMonitor.enableAnomalyDetection();
+```
+
 ## 🔬 Advanced Features
 
 ### 1. Custom Affinity Strategies
@@ -662,7 +768,18 @@ governor.setGovernor(performanceCpus, CPUGovernor.PERFORMANCE);
 governor.setFrequencyRange(performanceCpus, 2400000, 3200000); // 2.4-3.2 GHz
 ```
 
-## 📊 Benchmarking
+## 📊 Performance Benchmarks
+
+### Production Performance Targets
+
+| Operation | Latency (P99) | Throughput | Use Case |
+|-----------|---------------|------------|----------|
+| Hot-Path Affinity Query | < 100ns | > 10M ops/sec | Trading loops, order processing |
+| Standard Affinity Set | < 500μs | > 1K ops/sec | Configuration, setup operations |
+| NUMA Memory Allocation | < 1μs | > 100K ops/sec | Buffer allocation, data structures |
+| System Topology Query | < 10μs | > 10K ops/sec | Initialization, monitoring |
+| Cache Hit Operations | < 50ns | > 20M ops/sec | Cached affinity queries |
+| Context Switch Time | < 2μs | N/A | OS scheduler overhead |
 
 ### Built-in Benchmarks
 
@@ -676,6 +793,94 @@ System.out.println("=== Benchmark Results ===");
 System.out.println("Affinity set latency: " + results.getAffinityLatency() + " ns");
 System.out.println("NUMA allocation: " + results.getNumaLatency() + " ns");
 System.out.println("Context switch time: " + results.getContextSwitchTime() + " ns");
+```
+
+### Hot-Path vs Standard API Performance
+
+#### Two-Tier API Design
+
+The library provides two distinct API layers optimized for different performance requirements:
+
+**Configuration API (Standard)**
+- **Use Case**: Application startup, configuration, monitoring
+- **Latency**: 50-500 microseconds
+- **Features**: Full validation, comprehensive error handling, audit logging
+- **Thread Safety**: Full concurrency support
+
+**Hot-Path API (Ultra-Low Latency)**
+- **Use Case**: Trading critical path, order processing, market data handling
+- **Latency**: < 100 nanoseconds (cached operations)
+- **Features**: Lock-free operations, zero allocation, minimal overhead
+- **Thread Safety**: Lock-free, wait-free algorithms
+
+```java
+// Configuration Phase (Startup) - Use Standard API
+AffinityConfig config = new AffinityConfig.Builder()
+    .enableCaching(true)
+    .enableThreadLocalCaching(true)
+    .testMode(false)
+    .build();
+
+AffinityLibrary library = AffinityLibraryFactory.create(config);
+
+// Setup phase - higher latency acceptable
+BitSet tradingCpus = new BitSet();
+tradingCpus.set(2, 6); // CPUs 2-5 for trading threads
+library.setCurrentThreadAffinity(tradingCpus);
+
+// Hot-Path Phase (Trading) - Use Hot-Path API
+AffinityManager hotPath = AffinityManager.getInstance();
+
+// Ultra-fast operations in trading loop
+while (marketOpen) {
+    // < 100ns latency for cached queries
+    OperationResult<BitSet> affinity = hotPath.getCurrentThreadAffinityFast();
+
+    // Process order...
+    processOrder(order);
+}
+```
+
+### @HotPath Annotations
+
+Use the `@HotPath` annotation to mark performance-critical methods:
+
+```java
+public class HFTOrderProcessor {
+    @HotPath(expectedFrequency = 1000000, targetLatencyNs = 100)
+    public void processOrder(Order order) {
+        // Ultra-low latency order processing
+        AffinityManager hotPath = AffinityManager.getInstance();
+        OperationResult<BitSet> affinity = hotPath.getCurrentThreadAffinityFast();
+
+        // Process with guaranteed CPU isolation
+        executeOrder(order);
+    }
+
+    @HotPath(targetLatencyNs = 500)
+    public void handleMarketData(MarketData data) {
+        // Minimal overhead data processing
+        parseAndDistribute(data);
+    }
+}
+```
+
+### Object Pooling for Zero-Allocation
+
+Use object pooling to eliminate allocations in hot paths:
+
+```java
+// Zero-allocation operations using object pools
+try (PooledBitSet pooledMask = PooledBitSet.acquire()) {
+    pooledMask.set(2, 6); // Set CPUs 2-5
+    hotPath.setThreadAffinityFast(Thread.currentThread().getId(), pooledMask);
+    // Automatically returned to pool
+}
+
+// Check pool statistics
+ObjectPoolStats poolStats = ObjectPoolManager.getStats();
+System.out.println("Pool efficiency: " + poolStats.getHitRate());
+System.out.println("Leaked objects: " + poolStats.getLeakedObjects());
 ```
 
 ### Custom Benchmarks
