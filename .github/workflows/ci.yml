@@ -1,0 +1,291 @@
+name: Multi-Platform Thread Affinity CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run tests daily at 2 AM UTC to catch any environment issues
+    - cron: '0 2 * * *'
+
+env:
+  MAVEN_OPTS: -Dhttp.keepAlive=false -Dmaven.wagon.http.pool=false -Dmaven.wagon.http.retryHandler.class=standard -Dmaven.wagon.http.retryHandler.count=3
+
+jobs:
+  # Basic validation and quick tests
+  validate:
+    name: Validate Project
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: Validate Maven project
+        run: mvn validate
+
+      - name: Compile project
+        run: mvn clean compile test-compile
+
+  # Multi-platform matrix testing
+  test-matrix:
+    name: Test (${{ matrix.os }}, Java ${{ matrix.java }}, ${{ matrix.arch }})
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        java: ['11', '17', '21']
+        arch: [x64]
+        include:
+          # ARM64 testing on Ubuntu and macOS
+          - os: ubuntu-24.04-arm64
+            java: '11'
+            arch: arm64
+          - os: ubuntu-24.04-arm64
+            java: '17'
+            arch: arm64
+          - os: macos-14  # M1/M2 runners
+            java: '11'
+            arch: arm64
+          - os: macos-14
+            java: '17'
+            arch: arm64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: 'temurin'
+          architecture: ${{ matrix.arch }}
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-${{ matrix.arch }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.arch }}-m2
+            ${{ runner.os }}-m2
+
+      - name: Display system information
+        shell: bash
+        run: |
+          echo "=== System Information ==="
+          echo "OS: ${{ matrix.os }}"
+          echo "Architecture: ${{ matrix.arch }}"
+          echo "Java Version: ${{ matrix.java }}"
+          echo "Runner OS: ${{ runner.os }}"
+          echo "Available CPUs: $(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 'Unknown')"
+          echo "Memory: $(free -h 2>/dev/null | head -2 || vm_stat 2>/dev/null | head -5 || echo 'Memory info unavailable')"
+          echo "Java Version Details:"
+          java -version
+          echo "==========================="
+
+      - name: Run unit tests
+        run: mvn test -B -fae
+
+      - name: Run Linux-specific tests
+        if: runner.os == 'Linux'
+        run: mvn test -B -fae -Plinux
+
+      - name: Run Windows-specific tests
+        if: runner.os == 'Windows'
+        run: mvn test -B -fae -Pwindows
+
+      - name: Run integration tests
+        run: mvn verify -B -fae
+        env:
+          AFFINITY_TEST_MODE: integration
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.os }}-${{ matrix.arch }}-java${{ matrix.java }}
+          path: |
+            target/surefire-reports/
+            target/failsafe-reports/
+            target/site/jacoco/
+          retention-days: 30
+
+  # Comprehensive test with all profiles
+  comprehensive-test:
+    name: Comprehensive Test Suite
+    needs: test-matrix
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: Run comprehensive test suite
+        run: mvn verify -B -fae -Ptest-all
+        env:
+          AFFINITY_TEST_MODE: comprehensive
+
+      - name: Run standalone comprehensive test
+        shell: bash
+        run: |
+          echo "=== Running Standalone Comprehensive Test ==="
+          mvn package -B -DskipTests
+          javac -cp "target/affinity-library-1.0.0-jar-with-dependencies.jar" ComprehensiveAffinityTest.java
+          java -cp ".:target/affinity-library-1.0.0-jar-with-dependencies.jar" ComprehensiveAffinityTest
+
+      - name: Generate coverage report
+        run: mvn jacoco:report
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: target/site/jacoco/jacoco.xml
+          flags: ${{ runner.os }}
+          name: codecov-${{ matrix.os }}
+
+  # Security and quality checks
+  security-analysis:
+    name: Security Analysis
+    runs-on: ubuntu-latest
+    needs: validate
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: Run security analysis
+        run: |
+          mvn compile
+          # Check for known vulnerabilities in dependencies
+          mvn org.owasp:dependency-check-maven:check
+
+      - name: Upload security report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-report
+          path: target/dependency-check-report.html
+          retention-days: 30
+
+  # Build artifacts
+  build-artifacts:
+    name: Build Artifacts
+    runs-on: ubuntu-latest
+    needs: [test-matrix, comprehensive-test]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: Build project
+        run: mvn clean package -B -DskipTests
+
+      - name: Upload JAR artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: jar-artifacts
+          path: |
+            target/*.jar
+            !target/*-sources.jar
+            !target/*-javadoc.jar
+          retention-days: 90
+
+      - name: Upload fat JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: fat-jar
+          path: target/*-jar-with-dependencies.jar
+          retention-days: 90
+
+  # Summary job for status checks
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs: [validate, test-matrix, comprehensive-test, security-analysis, build-artifacts]
+    if: always()
+
+    steps:
+      - name: Check all jobs status
+        run: |
+          echo "Validate: ${{ needs.validate.result }}"
+          echo "Test Matrix: ${{ needs.test-matrix.result }}"
+          echo "Comprehensive Test: ${{ needs.comprehensive-test.result }}"
+          echo "Security Analysis: ${{ needs.security-analysis.result }}"
+          echo "Build Artifacts: ${{ needs.build-artifacts.result }}"
+
+          if [[ "${{ needs.validate.result }}" != "success" ||
+                "${{ needs.test-matrix.result }}" != "success" ||
+                "${{ needs.comprehensive-test.result }}" != "success" ]]; then
+            echo "❌ Required jobs failed"
+            exit 1
+          fi
+
+          echo "✅ All required jobs passed"
+
+      - name: Post success notification
+        if: success()
+        run: |
+          echo "🎉 CI pipeline completed successfully!"
+          echo "✅ All tests passed across multiple platforms and Java versions"
+          echo "🔧 Thread affinity library is ready for deployment"

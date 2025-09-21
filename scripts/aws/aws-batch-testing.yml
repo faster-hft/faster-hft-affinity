@@ -1,0 +1,374 @@
+# AWS Batch Configuration for Automated HFT Thread Affinity Testing
+# This CloudFormation template sets up AWS Batch for automated testing
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'HFT Thread Affinity Library - AWS Batch Testing Infrastructure'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: faster-thread-affinity
+    Description: Name of the project
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID for the Batch infrastructure
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Subnet IDs for the Batch compute environment
+
+  MaxVcpus:
+    Type: Number
+    Default: 256
+    Description: Maximum number of vCPUs for the compute environment
+
+  InstanceTypes:
+    Type: CommaDelimitedList
+    Default: "m5.large,c5.large,m5a.large,c5a.large,m6g.large,c6g.large"
+    Description: Instance types to use for testing
+
+Resources:
+  # IAM Role for Batch Service
+  BatchServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-batch-service-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: batch.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole
+
+  # IAM Role for EC2 instances
+  EcsInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-ecs-instance-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+
+  # Instance Profile
+  EcsInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub '${ProjectName}-ecs-instance-profile'
+      Roles:
+        - !Ref EcsInstanceRole
+
+  # Security Group for Batch instances
+  BatchSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub '${ProjectName}-batch-sg'
+      GroupDescription: Security group for HFT affinity testing batch jobs
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+
+  # Launch Template for x86_64 instances
+  X86LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub '${ProjectName}-x86-template'
+      LaunchTemplateData:
+        ImageId: !Ref LatestAmiId
+        SecurityGroupIds:
+          - !Ref BatchSecurityGroup
+        IamInstanceProfile:
+          Arn: !GetAtt EcsInstanceProfile.Arn
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            echo ECS_CLUSTER=${X86ComputeEnvironment} >> /etc/ecs/ecs.config
+            echo ECS_ENABLE_TASK_IAM_ROLE=true >> /etc/ecs/ecs.config
+
+            # Install Java and testing tools
+            yum update -y
+            yum install -y java-11-amazon-corretto-headless java-17-amazon-corretto-headless
+            yum install -y git maven htop iotop sysstat perf util-linux
+
+            # System optimizations for HFT testing
+            echo performance > /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 2>/dev/null || true
+
+            # Disable CPU idle states
+            for i in /sys/devices/system/cpu/cpu*/cpuidle/state*/disable; do
+                echo 1 > $i 2>/dev/null || true
+            done
+
+            # Memory optimizations
+            echo 1 > /proc/sys/vm/swappiness
+            echo never > /sys/kernel/mm/transparent_hugepage/enabled
+
+  # Launch Template for ARM64 instances
+  ArmLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub '${ProjectName}-arm-template'
+      LaunchTemplateData:
+        ImageId: !Ref LatestArmAmiId
+        SecurityGroupIds:
+          - !Ref BatchSecurityGroup
+        IamInstanceProfile:
+          Arn: !GetAtt EcsInstanceProfile.Arn
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            echo ECS_CLUSTER=${ArmComputeEnvironment} >> /etc/ecs/ecs.config
+            echo ECS_ENABLE_TASK_IAM_ROLE=true >> /etc/ecs/ecs.config
+
+            # Install Java and testing tools
+            yum update -y
+            yum install -y java-11-amazon-corretto-headless java-17-amazon-corretto-headless
+            yum install -y git maven htop iotop sysstat perf util-linux
+
+            # System optimizations for HFT testing
+            echo performance > /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 2>/dev/null || true
+
+            # ARM-specific optimizations
+            for i in /sys/devices/system/cpu/cpu*/cpuidle/state*/disable; do
+                echo 1 > $i 2>/dev/null || true
+            done
+
+  # Compute Environment for x86_64
+  X86ComputeEnvironment:
+    Type: AWS::Batch::ComputeEnvironment
+    Properties:
+      ComputeEnvironmentName: !Sub '${ProjectName}-x86-compute-env'
+      Type: MANAGED
+      State: ENABLED
+      ServiceRole: !GetAtt BatchServiceRole.Arn
+      ComputeResources:
+        Type: EC2
+        MinvCpus: 0
+        MaxvCpus: !Ref MaxVcpus
+        DesiredvCpus: 0
+        InstanceTypes:
+          - m5.large
+          - c5.large
+          - m5a.large
+          - c5a.large
+          - c5n.large
+        Subnets: !Ref SubnetIds
+        SecurityGroupIds:
+          - !Ref BatchSecurityGroup
+        LaunchTemplate:
+          LaunchTemplateId: !Ref X86LaunchTemplate
+          Version: $Latest
+        Tags:
+          Project: !Ref ProjectName
+          Architecture: x86_64
+
+  # Compute Environment for ARM64
+  ArmComputeEnvironment:
+    Type: AWS::Batch::ComputeEnvironment
+    Properties:
+      ComputeEnvironmentName: !Sub '${ProjectName}-arm-compute-env'
+      Type: MANAGED
+      State: ENABLED
+      ServiceRole: !GetAtt BatchServiceRole.Arn
+      ComputeResources:
+        Type: EC2
+        MinvCpus: 0
+        MaxvCpus: !Ref MaxVcpus
+        DesiredvCpus: 0
+        InstanceTypes:
+          - m6g.large
+          - c6g.large
+          - m6gd.large
+          - c6gd.large
+        Subnets: !Ref SubnetIds
+        SecurityGroupIds:
+          - !Ref BatchSecurityGroup
+        LaunchTemplate:
+          LaunchTemplateId: !Ref ArmLaunchTemplate
+          Version: $Latest
+        Tags:
+          Project: !Ref ProjectName
+          Architecture: arm64
+
+  # Job Queue for x86_64
+  X86JobQueue:
+    Type: AWS::Batch::JobQueue
+    Properties:
+      JobQueueName: !Sub '${ProjectName}-x86-queue'
+      State: ENABLED
+      Priority: 1
+      ComputeEnvironmentOrder:
+        - Order: 1
+          ComputeEnvironment: !Ref X86ComputeEnvironment
+
+  # Job Queue for ARM64
+  ArmJobQueue:
+    Type: AWS::Batch::JobQueue
+    Properties:
+      JobQueueName: !Sub '${ProjectName}-arm-queue'
+      State: ENABLED
+      Priority: 1
+      ComputeEnvironmentOrder:
+        - Order: 1
+          ComputeEnvironment: !Ref ArmComputeEnvironment
+
+  # IAM Role for Job execution
+  JobExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-job-execution-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource:
+                  - !Sub '${TestResultsBucket}/*'
+
+  # S3 Bucket for test results
+  TestResultsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-test-results-${AWS::AccountId}'
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldResults
+            Status: Enabled
+            ExpirationInDays: 30
+
+  # Job Definition for HFT Testing
+  HftTestJobDefinition:
+    Type: AWS::Batch::JobDefinition
+    Properties:
+      JobDefinitionName: !Sub '${ProjectName}-hft-test'
+      Type: container
+      PlatformCapabilities:
+        - EC2
+      ContainerProperties:
+        Image: amazoncorretto:17
+        Vcpus: 2
+        Memory: 4096
+        JobRoleArn: !GetAtt JobExecutionRole.Arn
+        Environment:
+          - Name: S3_BUCKET
+            Value: !Ref TestResultsBucket
+          - Name: PROJECT_NAME
+            Value: !Ref ProjectName
+        MountPoints:
+          - SourceVolume: tmp
+            ContainerPath: /tmp
+            ReadOnly: false
+        Volumes:
+          - Name: tmp
+            Host:
+              SourcePath: /tmp
+        Command:
+          - /bin/bash
+          - -c
+          - |
+            echo "=== HFT Thread Affinity Test Starting ==="
+
+            # System information
+            echo "Architecture: $(uname -m)"
+            echo "CPU Info:"
+            cat /proc/cpuinfo | grep -E "(model name|cpu cores|flags)" | head -5
+            echo "Memory: $(free -h)"
+            echo "Java Version: $(java -version 2>&1 | head -1)"
+
+            # Install dependencies
+            yum update -y
+            yum install -y git maven wget
+
+            # Download project
+            cd /tmp
+            git clone https://github.com/your-org/faster-thread-affinity.git || {
+                echo "Repository not available, using pre-uploaded JAR"
+                wget -O affinity-library.jar "https://github.com/your-org/faster-thread-affinity/releases/latest/download/affinity-library-1.0.0-jar-with-dependencies.jar"
+            }
+
+            if [[ -d faster-thread-affinity ]]; then
+                cd faster-thread-affinity
+
+                # Build project
+                mvn clean package -B -DskipTests
+
+                # Run comprehensive tests
+                mvn test -B -fae
+
+                # Run performance tests
+                mvn test -B -fae -Pperformance
+
+                # Run standalone test
+                javac -cp "target/affinity-library-1.0.0-jar-with-dependencies.jar" ComprehensiveAffinityTest.java
+                java -cp ".:target/affinity-library-1.0.0-jar-with-dependencies.jar" ComprehensiveAffinityTest
+
+                # Upload results to S3
+                aws s3 cp target/surefire-reports/ s3://${S3_BUCKET}/results/$(date +%Y%m%d-%H%M%S)-$(uname -m)/ --recursive
+            else
+                echo "Running with pre-built JAR"
+                java -jar affinity-library.jar || echo "JAR execution completed"
+            fi
+
+            echo "=== Test Completed ==="
+
+# Parameters for AMI lookup
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id
+
+  LatestArmAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ecs/optimized-ami/amazon-linux-2/arm64/recommended/image_id
+
+Outputs:
+  X86JobQueue:
+    Description: Job queue for x86_64 testing
+    Value: !Ref X86JobQueue
+    Export:
+      Name: !Sub '${AWS::StackName}-X86JobQueue'
+
+  ArmJobQueue:
+    Description: Job queue for ARM64 testing
+    Value: !Ref ArmJobQueue
+    Export:
+      Name: !Sub '${AWS::StackName}-ArmJobQueue'
+
+  JobDefinition:
+    Description: Job definition for HFT testing
+    Value: !Ref HftTestJobDefinition
+    Export:
+      Name: !Sub '${AWS::StackName}-JobDefinition'
+
+  TestResultsBucket:
+    Description: S3 bucket for test results
+    Value: !Ref TestResultsBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-TestResultsBucket'
+
+  BatchDashboard:
+    Description: AWS Batch console link
+    Value: !Sub 'https://console.aws.amazon.com/batch/v2/home?region=${AWS::Region}#job-queues'
