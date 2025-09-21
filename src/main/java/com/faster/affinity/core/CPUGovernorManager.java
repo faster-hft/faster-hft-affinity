@@ -26,7 +26,8 @@ public final class CPUGovernorManager {
         ONDEMAND("ondemand"),           // Dynamic scaling based on load
         CONSERVATIVE("conservative"),    // Gradual frequency changes
         SCHEDUTIL("schedutil"),         // Scheduler-driven scaling
-        USERSPACE("userspace");         // User-controlled frequency
+        USERSPACE("userspace"),         // User-controlled frequency
+        UNKNOWN("unknown");             // Unknown or unsupported governor
 
         private final String linuxName;
 
