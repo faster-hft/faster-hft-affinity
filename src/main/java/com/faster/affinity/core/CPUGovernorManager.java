@@ -11,34 +11,142 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * CPU Governor Manager for HFT Performance Optimization
+ * CPU Governor Manager for HFT Performance Optimization.
  *
- * Controls CPU frequency scaling governors to ensure deterministic performance.
- * Critical for trading applications that require consistent, predictable latency.
+ * <p>Controls CPU frequency scaling governors to ensure deterministic performance.
+ * Critical for trading applications that require consistent, predictable latency.</p>
+ *
+ * <p>CPU governors control how the processor adjusts its frequency based on system load.
+ * For high-frequency trading applications, maintaining maximum frequency (PERFORMANCE mode)
+ * is typically preferred to avoid frequency transition latencies that can impact
+ * trading algorithm execution times.</p>
+ *
+ * <h2>Supported Governors:</h2>
+ * <ul>
+ *   <li><b>PERFORMANCE:</b> Runs CPU at maximum frequency - recommended for HFT</li>
+ *   <li><b>POWERSAVE:</b> Runs CPU at minimum frequency - saves power but increases latency</li>
+ *   <li><b>ONDEMAND:</b> Dynamically adjusts frequency based on CPU load</li>
+ *   <li><b>CONSERVATIVE:</b> Similar to ondemand but with more gradual changes</li>
+ *   <li><b>SCHEDUTIL:</b> Uses scheduler information for frequency decisions</li>
+ *   <li><b>USERSPACE:</b> Allows manual frequency control</li>
+ * </ul>
+ *
+ * <h2>Usage Example:</h2>
+ * <pre>{@code
+ * CPUGovernorManager manager = new CPUGovernorManager(platformProvider, config);
+ * manager.initialize();
+ *
+ * // Set all cores to performance mode for maximum frequency
+ * OperationResult<Void> result = manager.setAllCoresGovernor(GovernorMode.PERFORMANCE);
+ * if (result.isSuccess()) {
+ *     System.out.println("All cores set to performance mode");
+ * }
+ *
+ * // Check status
+ * OperationResult<GovernorStatus> status = manager.getGovernorStatus();
+ * System.out.println("Governor status: " + status.getData());
+ *
+ * // Cleanup - restore original governors
+ * manager.shutdown();
+ * }</pre>
+ *
+ * <p><b>Platform Support:</b></p>
+ * <ul>
+ *   <li><b>Linux:</b> Full support via /sys/devices/system/cpu/cpufreq interface</li>
+ *   <li><b>Windows:</b> Limited support via power management APIs</li>
+ *   <li><b>macOS:</b> Not supported (requires mock implementation)</li>
+ * </ul>
+ *
+ * <p><b>Thread Safety:</b> This class is thread-safe and can be used concurrently.</p>
+ *
+ * @author Amar Mond
+ * @version 1.0.0
+ * @since 1.0.0
+ * @see GovernorMode
+ * @see GovernorStatus
+ * @see GovernorInfo
  */
 public final class CPUGovernorManager {
     private static final Logger logger = LoggerFactory.getLogger(CPUGovernorManager.class);
 
-    // Governor modes available on Linux systems
+    /**
+     * CPU frequency governor modes available on Linux systems.
+     *
+     * <p>Each governor implements a different policy for CPU frequency scaling
+     * based on system load and performance requirements.</p>
+     *
+     * @author Amar Mond
+     */
     public enum GovernorMode {
-        PERFORMANCE("performance"),      // Maximum frequency, best for HFT
-        POWERSAVE("powersave"),         // Minimum frequency
-        ONDEMAND("ondemand"),           // Dynamic scaling based on load
-        CONSERVATIVE("conservative"),    // Gradual frequency changes
-        SCHEDUTIL("schedutil"),         // Scheduler-driven scaling
-        USERSPACE("userspace"),         // User-controlled frequency
-        UNKNOWN("unknown");             // Unknown or unsupported governor
+        /**
+         * Performance governor - runs CPU at maximum frequency.
+         * <p>Recommended for HFT applications requiring consistent, minimal latency.</p>
+         */
+        PERFORMANCE("performance"),
+
+        /**
+         * Powersave governor - runs CPU at minimum frequency.
+         * <p>Saves power but increases latency. Not recommended for trading applications.</p>
+         */
+        POWERSAVE("powersave"),
+
+        /**
+         * Ondemand governor - dynamically scales frequency based on CPU load.
+         * <p>Increases frequency when load is high, decreases when idle.</p>
+         */
+        ONDEMAND("ondemand"),
+
+        /**
+         * Conservative governor - similar to ondemand but with more gradual frequency changes.
+         * <p>Less aggressive frequency scaling than ondemand.</p>
+         */
+        CONSERVATIVE("conservative"),
+
+        /**
+         * Schedutil governor - uses scheduler information for frequency decisions.
+         * <p>Modern governor that integrates with the kernel scheduler.</p>
+         */
+        SCHEDUTIL("schedutil"),
+
+        /**
+         * Userspace governor - allows manual frequency control.
+         * <p>Frequency must be set explicitly by userspace applications.</p>
+         */
+        USERSPACE("userspace"),
+
+        /**
+         * Unknown or unsupported governor.
+         * <p>Used when the actual governor cannot be determined or is not supported.</p>
+         */
+        UNKNOWN("unknown");
 
         private final String linuxName;
 
+        /**
+         * Creates a governor mode with the specified Linux kernel name.
+         *
+         * @param linuxName the name used by the Linux kernel for this governor
+         */
         GovernorMode(String linuxName) {
             this.linuxName = linuxName;
         }
 
+        /**
+         * Gets the Linux kernel name for this governor mode.
+         *
+         * @return the string name used by the Linux kernel
+         */
         public String getLinuxName() {
             return linuxName;
         }
 
+        /**
+         * Converts a Linux kernel governor name to a GovernorMode enum.
+         *
+         * @param name the Linux kernel governor name
+         * @return the corresponding GovernorMode
+         * @throws IllegalArgumentException if the name is not recognized
+         */
         public static GovernorMode fromString(String name) {
             for (GovernorMode mode : values()) {
                 if (mode.linuxName.equals(name)) {

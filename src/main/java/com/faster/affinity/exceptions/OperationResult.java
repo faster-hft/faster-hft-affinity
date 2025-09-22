@@ -5,8 +5,58 @@ import java.util.function.Supplier;
 
 /**
  * Enhanced result wrapper for operations that can fail.
- * Designed for zero-allocation hot paths with pre-allocated singleton instances
- * and functional composition capabilities for HFT environments.
+ *
+ * <p>Designed for zero-allocation hot paths with pre-allocated singleton instances
+ * and functional composition capabilities for HFT environments. This class provides
+ * a type-safe way to handle success and failure cases without throwing exceptions
+ * in performance-critical code paths.</p>
+ *
+ * <h2>Design Principles:</h2>
+ * <ul>
+ *   <li><b>Zero Allocation:</b> Pre-allocated singleton instances for common failures</li>
+ *   <li><b>Type Safety:</b> Compile-time guarantees for success/failure handling</li>
+ *   <li><b>Performance:</b> No exception throwing in hot paths</li>
+ *   <li><b>Composability:</b> Functional programming patterns for result chaining</li>
+ * </ul>
+ *
+ * <h2>Usage Examples:</h2>
+ * <pre>{@code
+ * // Basic usage
+ * OperationResult<BitSet> result = affinity.getCurrentThreadAffinity();
+ * if (result.isSuccess()) {
+ *     BitSet cpuMask = result.getData();
+ *     System.out.println("CPU mask: " + cpuMask);
+ * } else {
+ *     System.err.println("Error: " + result.getError().getMessage());
+ * }
+ *
+ * // Functional composition
+ * OperationResult<String> description = result
+ *     .map(BitSet::toString)
+ *     .mapError(error -> "Failed to get affinity: " + error.getMessage());
+ *
+ * // Chaining operations
+ * OperationResult<Void> chainResult = result
+ *     .flatMap(cpuMask -> affinity.setThreadAffinity(threadId, cpuMask))
+ *     .orElse(() -> OperationResult.success(null));
+ * }</pre>
+ *
+ * <h2>Pre-allocated Common Failures:</h2>
+ * <p>For performance-critical operations, common failure cases use pre-allocated
+ * singleton instances to avoid object allocation:</p>
+ * <ul>
+ *   <li>Cache expired/closed</li>
+ *   <li>Invalid parameters</li>
+ *   <li>System call failures</li>
+ *   <li>Permission denied</li>
+ * </ul>
+ *
+ * @param <T> the type of the successful result value
+ * @author Amar Mond
+ * @version 1.0.0
+ * @since 1.0.0
+ * @see AffinityException
+ * @see ErrorCodes
  */
 public final class OperationResult<T> {
     private final boolean success;
