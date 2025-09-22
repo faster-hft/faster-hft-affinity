@@ -51,13 +51,14 @@ jobs:
         java: ['11', '17', '21']
         arch: [x64]
         include:
-          # ARM64 testing on Ubuntu and macOS
-          - os: ubuntu-24.04-arm64
-            java: '11'
-            arch: arm64
-          - os: ubuntu-24.04-arm64
-            java: '17'
-            arch: arm64
+          # ARM64 testing on macOS (Ubuntu ARM64 temporarily disabled due to runner availability issues)
+          # TODO: Re-enable ubuntu-24.04-arm64 when GitHub resolves runner capacity issues
+          # - os: ubuntu-24.04-arm64
+          #   java: '11'
+          #   arch: arm64
+          # - os: ubuntu-24.04-arm64
+          #   java: '17'
+          #   arch: arm64
           - os: macos-14  # M1/M2 runners
             java: '11'
             arch: arm64
