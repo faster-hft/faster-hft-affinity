@@ -9,8 +9,53 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Factory and facade for the complete affinity library.
- * Provides a single entry point for all CPU affinity, NUMA, topology, and performance operations.
+ * Factory and facade for the complete HFT Affinity Library.
+ *
+ * <p>Provides a single entry point for all CPU affinity, NUMA, topology, and performance
+ * operations specifically designed for high-frequency trading applications.</p>
+ *
+ * <p>This factory manages the lifecycle of the affinity library and provides both
+ * singleton and custom-configured instances. The default instance uses automatically
+ * detected configuration optimized for HFT workloads.</p>
+ *
+ * <h2>Usage Example:</h2>
+ * <pre>{@code
+ * // Get the default instance with automatic configuration
+ * AffinityLibrary affinity = AffinityLibraryFactory.getInstance();
+ *
+ * // Pin current thread to core 0 for trading
+ * BitSet tradingCores = new BitSet();
+ * tradingCores.set(0);
+ * affinity.setCurrentThreadAffinity(tradingCores);
+ *
+ * // Set performance governor for maximum frequency
+ * affinity.setAllCoresGovernor(CPUGovernorManager.GovernorMode.PERFORMANCE);
+ *
+ * // Clean up
+ * affinity.shutdown();
+ * }</pre>
+ *
+ * <h2>Custom Configuration:</h2>
+ * <pre>{@code
+ * // Create custom configuration
+ * AffinityConfig config = AffinityConfig.builder()
+ *     .enableNUMAOptimizations(true)
+ *     .enableIRQIsolation(true)
+ *     .autoSetPerformanceGovernor(true)
+ *     .build();
+ *
+ * // Create instance with custom config
+ * AffinityLibrary affinity = AffinityLibraryFactory.createInstance(config);
+ * }</pre>
+ *
+ * <p><b>Thread Safety:</b> All factory methods are thread-safe and can be called
+ * concurrently from multiple threads.</p>
+ *
+ * @author Amar Mond
+ * @version 1.0.0
+ * @since 1.0.0
+ * @see AffinityLibrary
+ * @see AffinityConfig
  */
 public final class AffinityLibraryFactory {
     private static final Logger logger = LoggerFactory.getLogger(AffinityLibraryFactory.class);
