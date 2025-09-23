@@ -323,7 +323,9 @@
                 </executions>
             </plugin>
 
-            <!-- WSL Deployment Plugin for Cross-Platform Testing -->
+            <!-- WSL Deployment Plugin for Cross-Platform Testing - DISABLED FOR CI -->
+            <!-- This plugin only works on local Windows machines with WSL installed -->
+            <!--
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-antrun-plugin</artifactId>
@@ -358,6 +360,7 @@
                     </execution>
                 </executions>
             </plugin>
+            -->
         </plugins>
     </build>
 
@@ -479,7 +482,9 @@
             </build>
         </profile>
 
-        <!-- WSL deployment and testing profile -->
+        <!-- WSL deployment and testing profile - DISABLED FOR CI -->
+        <!-- This profile only works on local Windows machines with WSL installed -->
+        <!--
         <profile>
             <id>wsl-deploy</id>
             <activation>
@@ -524,6 +529,7 @@
                 </plugins>
             </build>
         </profile>
+        -->
 
         <!-- HFT production quality profile -->
         <profile>
