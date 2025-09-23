@@ -53,7 +53,7 @@ import java.util.function.Supplier;
  *
  * @param <T> the type of the successful result value
  * @author Amar Mond
- * @version 1.0.0
+ * @version 1.1.0
  * @since 1.0.0
  * @see AffinityException
  * @see ErrorCodes

@@ -52,7 +52,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * concurrently from multiple threads.</p>
  *
  * @author Amar Mond
- * @version 1.0.0
+ * @version 1.1.0
  * @since 1.0.0
  * @see AffinityLibrary
  * @see AffinityConfig
