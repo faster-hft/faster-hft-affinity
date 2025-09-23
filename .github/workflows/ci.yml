@@ -1,13 +1,19 @@
 name: Multi-Platform Thread Affinity CI
 
+# CI/CD pipeline temporarily disabled
+# To re-enable, uncomment the 'on:' section below
+# on:
+#   push:
+#     branches: [ main, develop ]
+#   pull_request:
+#     branches: [ main, develop ]
+#   schedule:
+#     # Run tests daily at 2 AM UTC to catch any environment issues
+#     - cron: '0 2 * * *'
+
+# Manual trigger only for now
 on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main, develop ]
-  schedule:
-    # Run tests daily at 2 AM UTC to catch any environment issues
-    - cron: '0 2 * * *'
+  workflow_dispatch:
 
 env:
   MAVEN_OPTS: -Dhttp.keepAlive=false -Dmaven.wagon.http.pool=false -Dmaven.wagon.http.retryHandler.class=standard -Dmaven.wagon.http.retryHandler.count=3
