@@ -60,7 +60,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <p><b>Thread Safety:</b> This class is thread-safe and can be used concurrently.</p>
  *
  * @author Amar Mond
- * @version 1.0.0
+ * @version 1.1.0
  * @since 1.0.0
  * @see GovernorMode
  * @see GovernorStatus

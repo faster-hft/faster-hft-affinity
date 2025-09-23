@@ -60,7 +60,7 @@ import com.faster.affinity.topology.TopologyDetector;
  * </ul>
  *
  * @author Amar Mond
- * @version 1.0.0
+ * @version 1.1.0
  * @since 1.0.0
  * @see AffinityLibraryFactory
  * @see OperationResult
