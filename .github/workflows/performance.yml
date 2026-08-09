@@ -161,18 +161,18 @@ jobs:
           echo "=== Running Standalone Performance Test ==="
           mvn package -B -DskipTests -q
 
-          javac -cp "target/affinity-library-1.0.0-jar-with-dependencies.jar" ComprehensiveAffinityTest.java
+          FATJAR=$(ls target/faster-hft-affinity-*-jar-with-dependencies.jar | head -1)
 
           echo "Measuring performance with time..."
           if [[ "${{ runner.os }}" == "Linux" ]]; then
             # Use higher privileges for better affinity control on Linux
-            sudo timeout 300s time java -cp ".:target/affinity-library-1.0.0-jar-with-dependencies.jar" \
+            sudo timeout 300s time java -cp "$FATJAR" \
               -XX:+UseG1GC -XX:MaxGCPauseMillis=1 -Xmx2g \
-              ComprehensiveAffinityTest || echo "Test completed with timeout/privileges limitation"
+              com.faster.affinity.examples.ComprehensiveAffinityTest || echo "Test completed with timeout/privileges limitation"
           else
-            timeout 300 java -cp ".;target/affinity-library-1.0.0-jar-with-dependencies.jar" \
+            timeout 300 java -cp "$FATJAR" \
               -XX:+UseG1GC -XX:MaxGCPauseMillis=1 -Xmx2g \
-              ComprehensiveAffinityTest || echo "Test completed"
+              com.faster.affinity.examples.ComprehensiveAffinityTest || echo "Test completed"
           fi
 
       - name: Collect performance metrics
@@ -273,13 +273,13 @@ jobs:
         run: |
           echo "=== Architecture-Specific Affinity Test ==="
           mvn package -B -DskipTests -q
-          javac -cp "target/affinity-library-1.0.0-jar-with-dependencies.jar" ComprehensiveAffinityTest.java
+          FATJAR=$(ls target/faster-hft-affinity-*-jar-with-dependencies.jar | head -1)
 
           # Quick test with reduced iterations for architecture comparison
-          java -cp ".:target/affinity-library-1.0.0-jar-with-dependencies.jar" \
+          java -cp "$FATJAR" \
             -XX:+UseG1GC -Xmx1g \
             -Daffinity.quick.test=true \
-            ComprehensiveAffinityTest
+            com.faster.affinity.examples.ComprehensiveAffinityTest
 
       - name: Upload architecture results
         uses: actions/upload-artifact@v4

@@ -258,7 +258,7 @@ aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A
 ```bash
 # This is normal - the script will reuse existing security groups
 # To start fresh, delete the security group manually:
-aws ec2 delete-security-group --group-name faster-thread-affinity-sg
+aws ec2 delete-security-group --group-name faster-hft-affinity-sg
 ```
 
 #### Google Cloud
@@ -300,11 +300,11 @@ gcloud compute project-info describe --format="table(quotas.metric,quotas.limit,
 **Issue**: Instances not terminating
 ```bash
 # AWS
-aws ec2 describe-instances --filters "Name=tag:Project,Values=faster-thread-affinity"
+aws ec2 describe-instances --filters "Name=tag:Project,Values=faster-hft-affinity"
 aws ec2 terminate-instances --instance-ids i-1234567890abcdef0
 
 # GCP
-gcloud compute instances list --filter="labels.project=faster-thread-affinity"
+gcloud compute instances list --filter="labels.project=faster-hft-affinity"
 gcloud compute instances delete INSTANCE_NAME --zone=ZONE
 ```
 
