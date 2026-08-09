@@ -144,9 +144,9 @@ jobs:
 
               <div class="stats">
                   <div class="badges">
-                      <img src="https://github.com/faster-hft/faster-thread-affinity/workflows/Multi-Platform%20Thread%20Affinity%20CI/badge.svg" alt="CI">
-                      <img src="https://github.com/faster-hft/faster-thread-affinity/workflows/Performance%20Testing/badge.svg" alt="Performance">
-                      <img src="https://codecov.io/gh/faster-hft/faster-thread-affinity/branch/main/graph/badge.svg" alt="Coverage">
+                      <img src="https://github.com/faster-hft/faster-hft-affinity/workflows/Multi-Platform%20Thread%20Affinity%20CI/badge.svg" alt="CI">
+                      <img src="https://github.com/faster-hft/faster-hft-affinity/workflows/Performance%20Testing/badge.svg" alt="Performance">
+                      <img src="https://codecov.io/gh/faster-hft/faster-hft-affinity/branch/main/graph/badge.svg" alt="Coverage">
                   </div>
               </div>
 
@@ -160,60 +160,60 @@ jobs:
                   <div class="doc-card">
                       <h3>📚 Complete Documentation</h3>
                       <p>Comprehensive API guide with examples, performance tuning, and platform-specific optimizations.</p>
-                      <a href="https://github.com/faster-hft/faster-thread-affinity/blob/main/DOCUMENTATION.md">Complete Docs →</a>
+                      <a href="https://github.com/faster-hft/faster-hft-affinity/blob/main/DOCUMENTATION.md">Complete Docs →</a>
                   </div>
 
                   <div class="doc-card">
                       <h3>📋 HFT Prerequisites</h3>
                       <p>Essential knowledge for HFT developers: CPU architecture, NUMA, cache hierarchy, and hardware fundamentals.</p>
-                      <a href="https://github.com/faster-hft/faster-thread-affinity/blob/main/HFT-PREREQUISITES.md">Prerequisites →</a>
+                      <a href="https://github.com/faster-hft/faster-hft-affinity/blob/main/HFT-PREREQUISITES.md">Prerequisites →</a>
                   </div>
 
                   <div class="doc-card">
                       <h3>⚡ HFT Optimization Guide</h3>
                       <p>Practical strategies for thread patterns, memory management, system tuning, and JVM optimization.</p>
-                      <a href="https://github.com/faster-hft/faster-thread-affinity/blob/main/HFT-OPTIMIZATION-GUIDE.md">Optimization →</a>
+                      <a href="https://github.com/faster-hft/faster-hft-affinity/blob/main/HFT-OPTIMIZATION-GUIDE.md">Optimization →</a>
                   </div>
 
                   <div class="doc-card">
                       <h3>🔨 HFT Examples</h3>
                       <p>Real-world implementations: trading systems, order management, market data processing, and risk management.</p>
-                      <a href="https://github.com/faster-hft/faster-thread-affinity/blob/main/HFT-EXAMPLES.md">Examples →</a>
+                      <a href="https://github.com/faster-hft/faster-hft-affinity/blob/main/HFT-EXAMPLES.md">Examples →</a>
                   </div>
 
                   <div class="doc-card">
                       <h3>🚀 Production Guide</h3>
                       <p>Enterprise deployment: hardware selection, OS configuration, monitoring, alerting, and troubleshooting.</p>
-                      <a href="https://github.com/faster-hft/faster-thread-affinity/blob/main/PRODUCTION-GUIDE.md">Production →</a>
+                      <a href="https://github.com/faster-hft/faster-hft-affinity/blob/main/PRODUCTION-GUIDE.md">Production →</a>
                   </div>
 
                   <div class="doc-card">
                       <h3>📊 Performance Benchmarks</h3>
                       <p>Live performance results, latency measurements, and benchmarks across different platforms and architectures.</p>
-                      <a href="https://github.com/faster-hft/faster-thread-affinity/actions/workflows/performance.yml">Benchmarks →</a>
+                      <a href="https://github.com/faster-hft/faster-hft-affinity/actions/workflows/performance.yml">Benchmarks →</a>
                   </div>
 
                   <div class="doc-card">
                       <h3>🔧 CI/CD Guide</h3>
                       <p>Multi-platform testing setup across cloud providers and architectures for comprehensive validation.</p>
-                      <a href="https://github.com/faster-hft/faster-thread-affinity/blob/main/CI-CD-GUIDE.md">CI/CD →</a>
+                      <a href="https://github.com/faster-hft/faster-hft-affinity/blob/main/CI-CD-GUIDE.md">CI/CD →</a>
                   </div>
 
                   <div class="doc-card">
                       <h3>🧪 Testing Guide</h3>
                       <p>Testing methodology, validation procedures, and platform-specific considerations for HFT environments.</p>
-                      <a href="https://github.com/faster-hft/faster-thread-affinity/blob/main/TESTING_GUIDE.md">Testing →</a>
+                      <a href="https://github.com/faster-hft/faster-hft-affinity/blob/main/TESTING_GUIDE.md">Testing →</a>
                   </div>
 
                   <div class="doc-card">
                       <h3>🔍 Source Code</h3>
                       <p>Browse the source code, contribute to the project, and report issues on GitHub.</p>
-                      <a href="https://github.com/faster-hft/faster-thread-affinity">GitHub Repository →</a>
+                      <a href="https://github.com/faster-hft/faster-hft-affinity">GitHub Repository →</a>
                   </div>
               </div>
 
               <div class="footer">
-                  <p>Generated on $(date) | <a href="https://github.com/faster-hft/faster-thread-affinity">faster-hft/faster-thread-affinity</a></p>
+                  <p>Generated on $(date) | <a href="https://github.com/faster-hft/faster-hft-affinity">faster-hft/faster-hft-affinity</a></p>
               </div>
           </body>
           </html>
@@ -266,7 +266,7 @@ jobs:
           sleep 30
 
           # Check if the site is accessible
-          DOCS_URL="https://faster-hft.github.io/faster-thread-affinity/"
+          DOCS_URL="https://faster-hft.github.io/faster-hft-affinity/"
 
           if curl -f -s "$DOCS_URL" > /dev/null; then
             echo "✅ Documentation site is accessible: $DOCS_URL"
@@ -287,6 +287,6 @@ jobs:
       - name: Documentation summary
         run: |
           echo "📚 Documentation deployed successfully!"
-          echo "🌐 Documentation site: https://faster-hft.github.io/faster-thread-affinity/"
-          echo "📖 JavaDoc API: https://faster-hft.github.io/faster-thread-affinity/api/"
-          echo "📋 Source: https://github.com/faster-hft/faster-thread-affinity"
+          echo "🌐 Documentation site: https://faster-hft.github.io/faster-hft-affinity/"
+          echo "📖 JavaDoc API: https://faster-hft.github.io/faster-hft-affinity/api/"
+          echo "📋 Source: https://github.com/faster-hft/faster-hft-affinity"

@@ -1,18 +1,26 @@
-# faster-thread-affinity
+# faster-hft-affinity
 
-[![CI](https://github.com/faster-hft/faster-thread-affinity/workflows/Multi-Platform%20Thread%20Affinity%20CI/badge.svg)](https://github.com/faster-hft/faster-thread-affinity/actions/workflows/ci.yml)
-[![Performance](https://github.com/faster-hft/faster-thread-affinity/workflows/Performance%20Testing/badge.svg)](https://github.com/faster-hft/faster-thread-affinity/actions/workflows/performance.yml)
-[![Release](https://github.com/faster-hft/faster-thread-affinity/workflows/Release/badge.svg)](https://github.com/faster-hft/faster-thread-affinity/actions/workflows/release.yml)
-[![codecov](https://codecov.io/gh/faster-hft/faster-thread-affinity/branch/main/graph/badge.svg)](https://codecov.io/gh/faster-hft/faster-thread-affinity)
+[![CI](https://github.com/faster-hft/faster-hft-affinity/workflows/Multi-Platform%20Thread%20Affinity%20CI/badge.svg)](https://github.com/faster-hft/faster-hft-affinity/actions/workflows/ci.yml)
+[![Performance](https://github.com/faster-hft/faster-hft-affinity/workflows/Performance%20Testing/badge.svg)](https://github.com/faster-hft/faster-hft-affinity/actions/workflows/performance.yml)
+[![Release](https://github.com/faster-hft/faster-hft-affinity/workflows/Release/badge.svg)](https://github.com/faster-hft/faster-hft-affinity/actions/workflows/release.yml)
+[![codecov](https://codecov.io/gh/faster-hft/faster-hft-affinity/branch/main/graph/badge.svg)](https://codecov.io/gh/faster-hft/faster-hft-affinity)
+
+## 📖 Companion to the Book
+
+This library is developed in and used throughout
+**Low Latency Programming in Java — Book 1: CPU Affinity, NUMA, and Thread
+Placement** by Amardeep Mond. Chapters 9–12 build and apply this library;
+every book sample compiles against this repo (enforced by
+`BookExamplesTest`). Book errata and companion material: https://faster-hft.dev
 
 Ultra-low-latency CPU affinity library for Java. Pin threads to specific cores, manage NUMA memory locality, set real-time scheduling policies. Features topology discovery, cache hierarchy analysis, processor groups (Windows), CPU isolation (Linux). Built for HFT systems requiring deterministic microsecond performance.
 
 ## 📊 Public Benchmarks & Test Results
 
-- **🔍 Live Test Results**: [GitHub Actions](https://github.com/faster-hft/faster-thread-affinity/actions) - Real-time CI/CD pipeline results
-- **📈 Performance Benchmarks**: [Performance Tests](https://github.com/faster-hft/faster-thread-affinity/actions/workflows/performance.yml) - Weekly HFT latency measurements
-- **📋 Code Coverage**: [Codecov](https://codecov.io/gh/faster-hft/faster-thread-affinity) - Test coverage analysis
-- **📦 Test Artifacts**: [Latest Results](https://github.com/faster-hft/faster-thread-affinity/actions) - Downloadable JUnit reports and performance data
+- **🔍 Live Test Results**: [GitHub Actions](https://github.com/faster-hft/faster-hft-affinity/actions) - Real-time CI/CD pipeline results
+- **📈 Performance Benchmarks**: [Performance Tests](https://github.com/faster-hft/faster-hft-affinity/actions/workflows/performance.yml) - Weekly HFT latency measurements
+- **📋 Code Coverage**: [Codecov](https://codecov.io/gh/faster-hft/faster-hft-affinity) - Test coverage analysis
+- **📦 Test Artifacts**: [Latest Results](https://github.com/faster-hft/faster-hft-affinity/actions) - Downloadable JUnit reports and performance data
 
 ### Latest Performance Results
 - **Average affinity setting latency**: < 100ns (target)
@@ -25,9 +33,9 @@ Ultra-low-latency CPU affinity library for Java. Pin threads to specific cores, 
 ### Maven Dependency
 ```xml
 <dependency>
-    <groupId>com.hft.systems</groupId>
-    <artifactId>affinity-library</artifactId>
-    <version>1.0.0</version>
+    <groupId>com.faster.affinity</groupId>
+    <artifactId>faster-hft-affinity</artifactId>
+    <version>1.2.0</version>
 </dependency>
 ```
 
@@ -87,7 +95,7 @@ public class QuickExample {
 
 ### 🔧 Technical Resources
 
-- **📖 JavaDoc API Reference**: [https://faster-hft.github.io/faster-thread-affinity/api/](https://faster-hft.github.io/faster-thread-affinity/api/)
+- **📖 JavaDoc API Reference**: [https://faster-hft.github.io/faster-hft-affinity/api/](https://faster-hft.github.io/faster-hft-affinity/api/)
 - **🔧 CI/CD Setup Guide**: [CI-CD-GUIDE.md](CI-CD-GUIDE.md) - Multi-platform testing and deployment
 - **🧪 Testing Guide**: [TESTING_GUIDE.md](TESTING_GUIDE.md) - Validation procedures and benchmarks
 

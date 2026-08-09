@@ -5,14 +5,14 @@
          http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.hft.systems</groupId>
-    <artifactId>affinity-library</artifactId>
-    <version>1.1.0</version>
+    <groupId>com.faster.affinity</groupId>
+    <artifactId>faster-hft-affinity</artifactId>
+    <version>1.2.0</version>
     <packaging>jar</packaging>
 
-    <name>HFT Affinity Library</name>
+    <name>faster-hft-affinity</name>
     <description>Production-ready CPU affinity, NUMA, and performance monitoring library for high-frequency trading systems</description>
-    <url>https://github.com/faster-hft/faster-thread-affinity</url>
+    <url>https://github.com/faster-hft/faster-hft-affinity</url>
 
     <properties>
         <!-- Java version -->
@@ -133,7 +133,8 @@
                         <exclude>**/integration/**/*Test.java</exclude>
                         <exclude>**/performance/**/*Test.java</exclude>
                     </excludes>
-                    <!-- Skip tests for now to avoid CI issues -->
+                    <!-- General unit tests remain skipped for now (pre-existing CI issues);
+                         the book-compatibility execution below always runs. -->
                     <skipTests>true</skipTests>
                     <testFailureIgnore>false</testFailureIgnore>
                     <forkCount>1</forkCount>
@@ -148,6 +149,27 @@
                     <!-- JVM arguments for HFT optimizations -->
                     <argLine>--add-exports java.base/jdk.internal.vm.annotation=ALL-UNNAMED</argLine>
                 </configuration>
+                <executions>
+                    <!-- Book-compatibility gate: always runs, on every platform. Guarantees the
+                         printed samples in "Low Latency Programming in Java - Book 1" keep
+                         compiling and executing against this library. -->
+                    <execution>
+                        <id>book-compatibility</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>test</goal>
+                        </goals>
+                        <configuration>
+                            <skipTests>false</skipTests>
+                            <includes>
+                                <include>**/book/*Test.java</include>
+                            </includes>
+                            <excludes>
+                                <exclude>only-book-tests-run-in-this-execution</exclude>
+                            </excludes>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
             <!-- Failsafe plugin for integration tests -->
@@ -297,7 +319,7 @@
                         <manifestEntries>
                             <Built-By>HFT Systems</Built-By>
                             <Built-Date>${maven.build.timestamp}</Built-Date>
-                            <Automatic-Module-Name>com.hft.systems.affinity</Automatic-Module-Name>
+                            <Automatic-Module-Name>com.faster.affinity</Automatic-Module-Name>
                         </manifestEntries>
                     </archive>
                 </configuration>

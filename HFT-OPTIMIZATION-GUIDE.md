@@ -13,7 +13,7 @@
 
 ## 🎯 Overview
 
-This guide provides battle-tested optimization strategies for HFT systems using the faster-thread-affinity library. These techniques are derived from real-world trading systems achieving sub-100ns latencies.
+This guide provides battle-tested optimization strategies for HFT systems using the faster-hft-affinity library. These techniques are derived from real-world trading systems achieving sub-100ns latencies.
 
 **Prerequisites**: Complete [HFT-PREREQUISITES.md](HFT-PREREQUISITES.md) before proceeding.
 

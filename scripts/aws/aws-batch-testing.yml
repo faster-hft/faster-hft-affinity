@@ -7,7 +7,7 @@ Description: 'HFT Thread Affinity Library - AWS Batch Testing Infrastructure'
 Parameters:
   ProjectName:
     Type: String
-    Default: faster-thread-affinity
+    Default: faster-hft-affinity
     Description: Name of the project
 
   VpcId:
@@ -305,13 +305,13 @@ Resources:
 
             # Download project
             cd /tmp
-            git clone https://github.com/faster-hft/faster-thread-affinity.git || {
+            git clone https://github.com/faster-hft/faster-hft-affinity.git || {
                 echo "Repository not available, using pre-uploaded JAR"
-                wget -O affinity-library.jar "https://github.com/faster-hft/faster-thread-affinity/releases/latest/download/affinity-library-1.0.0-jar-with-dependencies.jar"
+                wget -O faster-hft-affinity.jar "https://github.com/faster-hft/faster-hft-affinity/releases/latest/download/faster-hft-affinity-1.2.0-jar-with-dependencies.jar"
             }
 
-            if [[ -d faster-thread-affinity ]]; then
-                cd faster-thread-affinity
+            if [[ -d faster-hft-affinity ]]; then
+                cd faster-hft-affinity
 
                 # Build project
                 mvn clean package -B -DskipTests
@@ -323,14 +323,13 @@ Resources:
                 mvn test -B -fae -Pperformance
 
                 # Run standalone test
-                javac -cp "target/affinity-library-1.0.0-jar-with-dependencies.jar" ComprehensiveAffinityTest.java
-                java -cp ".:target/affinity-library-1.0.0-jar-with-dependencies.jar" ComprehensiveAffinityTest
+                java -cp "target/faster-hft-affinity-1.2.0-jar-with-dependencies.jar" com.faster.affinity.examples.ComprehensiveAffinityTest
 
                 # Upload results to S3
                 aws s3 cp target/surefire-reports/ s3://${S3_BUCKET}/results/$(date +%Y%m%d-%H%M%S)-$(uname -m)/ --recursive
             else
                 echo "Running with pre-built JAR"
-                java -jar affinity-library.jar || echo "JAR execution completed"
+                java -jar faster-hft-affinity.jar || echo "JAR execution completed"
             fi
 
             echo "=== Test Completed ==="

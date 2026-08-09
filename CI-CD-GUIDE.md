@@ -312,8 +312,7 @@ Automated release management:
 4. **Standalone Test**:
    ```bash
    mvn package -DskipTests
-   javac -cp "target/affinity-library-1.0.0-jar-with-dependencies.jar" ComprehensiveAffinityTest.java
-   java -cp ".:target/affinity-library-1.0.0-jar-with-dependencies.jar" ComprehensiveAffinityTest
+   java -cp "target/faster-hft-affinity-1.2.0-jar-with-dependencies.jar" com.faster.affinity.examples.ComprehensiveAffinityTest
    ```
 
 ## 🚨 Troubleshooting
@@ -355,7 +354,7 @@ aws service-quotas get-service-quota \
 **Issue**: SSH connection failures
 ```bash
 # Check security group
-aws ec2 describe-security-groups --group-names faster-thread-affinity-sg
+aws ec2 describe-security-groups --group-names faster-hft-affinity-sg
 
 # Ensure port 22 is open from your IP
 ```
