@@ -1,3 +1,0 @@
-@echo off
-echo Running Linux tests in WSL...
-wsl bash -c "cd /mnt/c/faster/faster-hft-affinity && mvn test -Dtest=\"*Linux*\""

@@ -1,33 +1,34 @@
 # 🚀 CI/CD Pipeline Guide for HFT Thread Affinity Library
 
-This guide covers the complete CI/CD pipeline setup for testing the HFT Thread Affinity Library across multiple platforms and architectures.
+This guide covers the CI/CD pipeline for the HFT Thread Affinity Library — GitHub Actions is the CI pipeline; the AWS and Google Cloud sections describe optional manual testing driven by the scripts under `scripts/`.
 
 ## 📋 Table of Contents
 
 1. [Overview](#overview)
 2. [GitHub Actions (Recommended)](#github-actions-recommended)
-3. [AWS EC2 Testing](#aws-ec2-testing)
-4. [Google Cloud Testing](#google-cloud-testing)
+3. [Optional manual cloud testing: AWS EC2 (scripts/)](#optional-manual-cloud-testing-aws-ec2-scripts)
+4. [Optional manual cloud testing: Google Cloud (scripts/)](#optional-manual-cloud-testing-google-cloud-scripts)
 5. [Cost Analysis](#cost-analysis)
 6. [Local Testing](#local-testing)
 7. [Troubleshooting](#troubleshooting)
 
 ## 🎯 Overview
 
-Our CI/CD pipeline provides comprehensive testing across:
+The CI pipeline runs on GitHub Actions and provides comprehensive testing across:
 
 - **Architectures**: x86_64 (Intel/AMD), ARM64 (Graviton, Apple Silicon, Ampere)
 - **Operating Systems**: Linux (Ubuntu, Amazon Linux), Windows, macOS
 - **Java Versions**: 11, 17, 21
-- **Cloud Platforms**: GitHub Actions, AWS EC2, Google Cloud
+
+Beyond CI, the repository ships optional scripts (`scripts/aws/`, `scripts/gcp/`) for manually testing on specialized cloud hardware.
 
 ### Testing Matrix
 
 | Platform | x86_64 | ARM64 | Cost | Notes |
 |----------|--------|-------|------|-------|
-| GitHub Actions | ✅ | ✅ | **FREE/Low** | Recommended for most testing |
-| AWS EC2 | ✅ | ✅ | ~$50-200/month | Advanced hardware testing |
-| Google Cloud | ✅ | ✅ | ~$40-180/month | Ampere Altra ARM processors |
+| GitHub Actions | ✅ | ✅ | **FREE/Low** | The CI pipeline — runs automatically |
+| AWS EC2 | ✅ | ✅ | ~$50-200/month | Optional manual testing via `scripts/aws/` |
+| Google Cloud | ✅ | ✅ | ~$40-180/month | Optional manual testing via `scripts/gcp/` |
 
 ## 🔧 GitHub Actions (Recommended)
 
@@ -117,7 +118,7 @@ Automated release management:
 - 50 runs/month × 15 minutes/run = 750 minutes
 - Cost: FREE (under 2,000 minute limit)
 
-## ☁️ AWS EC2 Testing
+## ☁️ Optional manual cloud testing: AWS EC2 (scripts/)
 
 ### When to Use AWS
 - Testing on specialized hardware (Intel, AMD, ARM Graviton)
@@ -188,7 +189,7 @@ Automated release management:
 **Monthly testing (weekly cycles):**
 - 4 cycles/month × $1.36 = **~$5.44/month**
 
-## 🌐 Google Cloud Testing
+## 🌐 Optional manual cloud testing: Google Cloud (scripts/)
 
 ### When to Use GCP
 - Testing ARM64 Ampere Altra processors

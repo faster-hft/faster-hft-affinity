@@ -714,27 +714,12 @@
         </repository>
     </repositories>
 
-    <!-- Distribution management (customize for your repository) -->
-    <distributionManagement>
-        <repository>
-            <id>releases</id>
-            <name>Internal Releases</name>
-            <url>https://your-nexus-server/repository/maven-releases/</url>
-        </repository>
-        <snapshotRepository>
-            <id>snapshots</id>
-            <name>Internal Snapshots</name>
-            <url>https://your-nexus-server/repository/maven-snapshots/</url>
-        </snapshotRepository>
-    </distributionManagement>
-
     <!-- Developers -->
     <developers>
         <developer>
-            <id>hft-team</id>
-            <name>HFT Development Team</name>
-            <email>dev@hft-systems.com</email>
-            <organization>HFT Systems</organization>
+            <id>amardeep-mond</id>
+            <name>Amardeep Mond</name>
+            <url>https://faster-hft.dev</url>
         </developer>
     </developers>
 

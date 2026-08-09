@@ -146,7 +146,6 @@ jobs:
                   <div class="badges">
                       <img src="https://github.com/faster-hft/faster-hft-affinity/workflows/Multi-Platform%20Thread%20Affinity%20CI/badge.svg" alt="CI">
                       <img src="https://github.com/faster-hft/faster-hft-affinity/workflows/Performance%20Testing/badge.svg" alt="Performance">
-                      <img src="https://codecov.io/gh/faster-hft/faster-hft-affinity/branch/main/graph/badge.svg" alt="Coverage">
                   </div>
               </div>
 
