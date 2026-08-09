@@ -9,6 +9,7 @@ import com.faster.affinity.exceptions.*;
 import com.faster.affinity.exceptions.OperationResult;
 import com.faster.affinity.performance.PerformanceMonitor;
 import com.faster.affinity.topology.TopologyDetector;
+import com.faster.affinity.validation.InputValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,6 +61,16 @@ class AffinityLibraryImpl implements AffinityLibrary {
     }
 
     @Override
+    public OperationResult<Void> setCurrentThreadAffinity(int cpu) {
+        checkInitialized();
+        OperationResult<Void> invalid = validateSingleCpu("setCurrentThreadAffinity", cpu);
+        if (invalid != null) {
+            return invalid;
+        }
+        return setCurrentThreadAffinity(singleCpuMask(cpu));
+    }
+
+    @Override
     public OperationResult<java.util.BitSet> getCurrentThreadAffinity() {
         checkInitialized();
         return affinityManager.getThreadAffinity(getCurrentThreadId());
@@ -69,6 +80,36 @@ class AffinityLibraryImpl implements AffinityLibrary {
     public OperationResult<Void> setThreadAffinity(long threadId, java.util.BitSet cpuMask) {
         checkInitialized();
         return affinityManager.setThreadAffinity(threadId, cpuMask);
+    }
+
+    @Override
+    public OperationResult<Void> setThreadAffinity(long threadId, int cpu) {
+        checkInitialized();
+        OperationResult<Void> invalid = validateSingleCpu("setThreadAffinity", cpu);
+        if (invalid != null) {
+            return invalid;
+        }
+        return setThreadAffinity(threadId, singleCpuMask(cpu));
+    }
+
+    private static java.util.BitSet singleCpuMask(int cpu) {
+        java.util.BitSet cpuMask = new java.util.BitSet();
+        cpuMask.set(cpu);
+        return cpuMask;
+    }
+
+    private OperationResult<Void> validateSingleCpu(String operation, int cpu) {
+        try {
+            InputValidator.validateCpuIndex(cpu, operation);
+        } catch (IllegalArgumentException e) {
+            return OperationResult.failure(new InvalidParameterException(operation, "cpu", cpu));
+        }
+        int detectedCpus = affinityManager.getSystemCapabilities().getCpuCount();
+        if (detectedCpus > 0 && cpu >= detectedCpus) {
+            return OperationResult.failure(new InvalidParameterException(operation, "cpu",
+                    cpu + " (detected CPU count is " + detectedCpus + ")"));
+        }
+        return null;
     }
 
     @Override
@@ -174,6 +215,16 @@ class AffinityLibraryImpl implements AffinityLibrary {
             return affinityManager.getPerformanceMonitor().getHighUtilizationCores(threshold);
         } catch (com.faster.affinity.exceptions.UnsupportedOperationException e) {
             return OperationResult.failure(e);
+        }
+    }
+
+    @Override
+    public NUMAManager getNUMAManager() {
+        checkInitialized();
+        try {
+            return affinityManager.getNUMAManager();
+        } catch (com.faster.affinity.exceptions.UnsupportedOperationException e) {
+            throw new IllegalStateException("NUMA operations are not available: " + e.getMessage(), e);
         }
     }
 

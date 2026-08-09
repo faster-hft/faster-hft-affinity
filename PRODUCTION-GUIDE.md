@@ -409,7 +409,7 @@ cp target/lib/*.jar "$DEPLOY_DIR/lib/"
 
 # 3. Deploy affinity library
 echo "Deploying thread affinity library..."
-cp target/affinity-library-*-jar-with-dependencies.jar "$DEPLOY_DIR/lib/"
+cp target/faster-hft-affinity-*-jar-with-dependencies.jar "$DEPLOY_DIR/lib/"
 
 # 4. Deploy configuration
 echo "Deploying configuration..."
