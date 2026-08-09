@@ -60,7 +60,7 @@ import com.faster.affinity.topology.TopologyDetector;
  * </ul>
  *
  * @author Amar Mond
- * @version 1.1.0
+ * @version 1.2.0
  * @since 1.0.0
  * @see AffinityLibraryFactory
  * @see OperationResult
@@ -87,6 +87,24 @@ public interface AffinityLibrary {
      */
     OperationResult<Void> setCurrentThreadAffinity(java.util.BitSet cpuMask);
     /**
+     * Pins the current thread to a single CPU core.
+     *
+     * <p>Convenience overload of {@link #setCurrentThreadAffinity(java.util.BitSet)}
+     * for the common case of pinning a thread to exactly one core. Equivalent to
+     * building a {@code BitSet} with only the bit {@code cpu} set and passing it
+     * to the mask-based variant.</p>
+     *
+     * @param cpu the CPU core ID to pin the current thread to (0-based). Must be
+     *            non-negative and less than the number of CPUs detected on the system.
+     * @return OperationResult containing success/failure status; fails with an
+     *         invalid-parameter error if {@code cpu} is negative or exceeds the
+     *         detected CPU count
+     * @since 1.2.0
+     * @see #setCurrentThreadAffinity(java.util.BitSet)
+     * @see #setThreadAffinity(long, int)
+     */
+    OperationResult<Void> setCurrentThreadAffinity(int cpu);
+    /**
      * Retrieves the current CPU affinity mask for the calling thread.
      *
      * @return OperationResult containing the current thread's CPU affinity mask,
@@ -104,6 +122,25 @@ public interface AffinityLibrary {
      * @see #getCurrentThreadId()
      */
     OperationResult<Void> setThreadAffinity(long threadId, java.util.BitSet cpuMask);
+    /**
+     * Pins a specific thread to a single CPU core.
+     *
+     * <p>Convenience overload of {@link #setThreadAffinity(long, java.util.BitSet)}
+     * for the common case of pinning a thread to exactly one core. Equivalent to
+     * building a {@code BitSet} with only the bit {@code cpu} set and passing it
+     * to the mask-based variant.</p>
+     *
+     * @param threadId the system thread ID to modify affinity for
+     * @param cpu the CPU core ID to pin the thread to (0-based). Must be
+     *            non-negative and less than the number of CPUs detected on the system.
+     * @return OperationResult containing success/failure status; fails with an
+     *         invalid-parameter error if {@code cpu} is negative or exceeds the
+     *         detected CPU count
+     * @since 1.2.0
+     * @see #setThreadAffinity(long, java.util.BitSet)
+     * @see #setCurrentThreadAffinity(int)
+     */
+    OperationResult<Void> setThreadAffinity(long threadId, int cpu);
     /**
      * Retrieves the CPU affinity mask for a specific thread.
      *
@@ -249,6 +286,23 @@ public interface AffinityLibrary {
     // NUMA (Non-Uniform Memory Access) Operations
     // ================================
 
+    /**
+     * Returns the NUMA manager for direct access to NUMA operations.
+     *
+     * <p>The returned manager exposes the full NUMA API — node discovery,
+     * thread-to-node affinity, and node-local memory allocation — for callers
+     * that prefer working with the manager directly rather than through the
+     * delegating methods on this interface (such as
+     * {@link #setThreadNumaAffinity(long, int)} and
+     * {@link #allocateNumaMemory(int, long)}).</p>
+     *
+     * @return the NUMAManager instance backing this library's NUMA operations
+     * @throws IllegalStateException if the library has been shut down or NUMA
+     *         operations are disabled in the configuration
+     * @since 1.2.0
+     * @see NUMAManager
+     */
+    NUMAManager getNUMAManager();
     /**
      * Retrieves the set of CPU cores belonging to a specific NUMA node.
      *

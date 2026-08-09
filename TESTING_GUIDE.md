@@ -84,7 +84,7 @@ mvn clean test jacoco:report -P test-all,hft-quality
 1. Build and deploy: Use "Maven Build and Deploy WSL" configuration
 2. SSH to WSL: `wsl`
 3. Navigate: `cd /home/amar/affinity-testing`
-4. Run: `java -jar faster-thread-affinity-*-jar-with-dependencies.jar`
+4. Run: `java -jar faster-hft-affinity-*-jar-with-dependencies.jar`
 
 ### Automated Cross-Platform Workflow
 ```bash
@@ -96,7 +96,7 @@ mvn package assembly:single -P wsl-deploy
 
 # Step 3: Test on Linux (from WSL)
 cd /home/amar/affinity-testing
-java -cp faster-thread-affinity-*-jar-with-dependencies.jar com.faster.affinity.harness.TestHarness --platform=linux
+java -cp faster-hft-affinity-*-jar-with-dependencies.jar com.faster.affinity.harness.TestHarness --platform=linux
 ```
 
 ## Quality Gates
@@ -179,7 +179,7 @@ fi
 mvn clean test jacoco:report -P test-all,hft-quality
 mvn package assembly:single -P wsl-deploy
 # Manual WSL testing
-java -jar target/faster-thread-affinity-*-jar-with-dependencies.jar
+java -jar target/faster-hft-affinity-*-jar-with-dependencies.jar
 ```
 
 ## Performance Monitoring

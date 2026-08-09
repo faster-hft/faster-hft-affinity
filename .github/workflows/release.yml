@@ -184,11 +184,8 @@ jobs:
 
           echo "Found fat JAR: $FAT_JAR"
 
-          # Compile and run comprehensive test
-          javac -cp "$FAT_JAR" ComprehensiveAffinityTest.java
-
           echo "Running comprehensive test with release JAR..."
-          java -cp ".:$FAT_JAR" -Xmx1g ComprehensiveAffinityTest || {
+          java -cp "$FAT_JAR" -Xmx1g com.faster.affinity.examples.ComprehensiveAffinityTest || {
             echo "⚠️ Test completed with warnings (expected for some privilege-limited environments)"
           }
 
@@ -237,10 +234,10 @@ jobs:
           - **Multi-core**: Optimized for HFT workloads
 
           ## 📦 Artifacts
-          - `affinity-library-${VERSION}.jar` - Main library
-          - `affinity-library-${VERSION}-jar-with-dependencies.jar` - Fat JAR with all dependencies
-          - `affinity-library-${VERSION}-sources.jar` - Source code
-          - `affinity-library-${VERSION}-javadoc.jar` - API documentation
+          - `faster-hft-affinity-${VERSION}.jar` - Main library
+          - `faster-hft-affinity-${VERSION}-jar-with-dependencies.jar` - Fat JAR with all dependencies
+          - `faster-hft-affinity-${VERSION}-sources.jar` - Source code
+          - `faster-hft-affinity-${VERSION}-javadoc.jar` - API documentation
 
           ## 🔧 Usage
           ```java

@@ -12,7 +12,7 @@
 
 ## 🎯 Overview
 
-This guide provides complete, production-ready implementations of HFT systems using the faster-thread-affinity library. These examples are based on real trading systems achieving sub-100 microsecond latencies.
+This guide provides complete, production-ready implementations of HFT systems using the faster-hft-affinity library. These examples are based on real trading systems achieving sub-100 microsecond latencies.
 
 **Performance Targets**:
 - **Market data processing**: < 1µs per message

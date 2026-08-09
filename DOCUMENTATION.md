@@ -22,9 +22,9 @@ Add to your `pom.xml`:
 
 ```xml
 <dependency>
-    <groupId>com.hft.systems</groupId>
-    <artifactId>affinity-library</artifactId>
-    <version>1.0.0</version>
+    <groupId>com.faster.affinity</groupId>
+    <artifactId>faster-hft-affinity</artifactId>
+    <version>1.2.0</version>
 </dependency>
 ```
 
@@ -972,16 +972,16 @@ public class LatencyOptimizedTradingSystem {
 - **[Production Guide](PRODUCTION-GUIDE.md)** - Enterprise deployment and operations
 
 ### External Resources
-- **JavaDoc API**: [https://faster-hft.github.io/faster-thread-affinity/api/](https://faster-hft.github.io/faster-thread-affinity/api/)
-- **GitHub Repository**: [https://github.com/faster-hft/faster-thread-affinity](https://github.com/faster-hft/faster-thread-affinity)
-- **Performance Benchmarks**: [https://github.com/faster-hft/faster-thread-affinity/actions/workflows/performance.yml](https://github.com/faster-hft/faster-thread-affinity/actions/workflows/performance.yml)
+- **JavaDoc API**: [https://faster-hft.github.io/faster-hft-affinity/api/](https://faster-hft.github.io/faster-hft-affinity/api/)
+- **GitHub Repository**: [https://github.com/faster-hft/faster-hft-affinity](https://github.com/faster-hft/faster-hft-affinity)
+- **Performance Benchmarks**: [https://github.com/faster-hft/faster-hft-affinity/actions/workflows/performance.yml](https://github.com/faster-hft/faster-hft-affinity/actions/workflows/performance.yml)
 - **CI/CD Guide**: [CI-CD-GUIDE.md](CI-CD-GUIDE.md)
 - **Testing Guide**: [TESTING_GUIDE.md](TESTING_GUIDE.md)
 
 ## 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/faster-hft/faster-thread-affinity/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/faster-hft/faster-thread-affinity/discussions)
+- **Issues**: [GitHub Issues](https://github.com/faster-hft/faster-hft-affinity/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/faster-hft/faster-hft-affinity/discussions)
 - **Email**: dev@faster-hft.com
 
 ---
