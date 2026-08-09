@@ -4,19 +4,10 @@ target/
 !**/src/test/**/target/
 
 ### IntelliJ IDEA ###
-.idea/modules.xml
-.idea/jarRepositories.xml
-.idea/compiler.xml
-.idea/libraries/
-.idea/workspace.xml
-.idea/usage.statistics.xml
-.idea/shelf/
+.idea/
 *.iws
 *.iml
 *.ipr
-
-# Keep shared run configurations
-!.idea/runConfigurations/
 
 ### Eclipse ###
 .apt_generated
@@ -72,4 +63,6 @@ benchmark-results/
 *.tmp
 *.temp
 .cache/
+### Editor backups of superseded sources ###
+*.java.old
 # Fixed ARM64 runner availability issues Mon, Sep 22, 2025  1:09:44 PM

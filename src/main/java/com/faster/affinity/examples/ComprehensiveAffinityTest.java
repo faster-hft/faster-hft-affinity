@@ -1,11 +1,15 @@
+package com.faster.affinity.examples;
+
 import com.faster.affinity.factory.AffinityLibraryFactory;
 import com.faster.affinity.factory.AffinityLibrary;
 import com.faster.affinity.exceptions.OperationResult;
 import java.util.BitSet;
 
 /**
- * Comprehensive test for the HFT Thread Affinity Library
- * This test can be run independently to verify library functionality
+ * Comprehensive standalone smoke test for the HFT Thread Affinity Library.
+ * Run directly from the fat JAR to verify library functionality on a target host:
+ * {@code java -cp faster-hft-affinity-<version>-jar-with-dependencies.jar
+ * com.faster.affinity.examples.ComprehensiveAffinityTest}
  */
 public class ComprehensiveAffinityTest {
 
