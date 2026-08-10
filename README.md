@@ -3,7 +3,6 @@
 [![CI](https://github.com/faster-hft/faster-hft-affinity/workflows/Multi-Platform%20Thread%20Affinity%20CI/badge.svg)](https://github.com/faster-hft/faster-hft-affinity/actions/workflows/ci.yml)
 [![Performance](https://github.com/faster-hft/faster-hft-affinity/workflows/Performance%20Testing/badge.svg)](https://github.com/faster-hft/faster-hft-affinity/actions/workflows/performance.yml)
 [![Release](https://github.com/faster-hft/faster-hft-affinity/workflows/Release/badge.svg)](https://github.com/faster-hft/faster-hft-affinity/actions/workflows/release.yml)
-[![codecov](https://codecov.io/gh/faster-hft/faster-hft-affinity/branch/main/graph/badge.svg)](https://codecov.io/gh/faster-hft/faster-hft-affinity)
 
 ## 📖 Companion to the Book
 
@@ -19,7 +18,6 @@ Ultra-low-latency CPU affinity library for Java. Pin threads to specific cores, 
 
 - **🔍 Live Test Results**: [GitHub Actions](https://github.com/faster-hft/faster-hft-affinity/actions) - Real-time CI/CD pipeline results
 - **📈 Performance Benchmarks**: [Performance Tests](https://github.com/faster-hft/faster-hft-affinity/actions/workflows/performance.yml) - Weekly HFT latency measurements
-- **📋 Code Coverage**: [Codecov](https://codecov.io/gh/faster-hft/faster-hft-affinity) - Test coverage analysis
 - **📦 Test Artifacts**: [Latest Results](https://github.com/faster-hft/faster-hft-affinity/actions) - Downloadable JUnit reports and performance data
 
 ### Latest Performance Results
