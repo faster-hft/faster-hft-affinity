@@ -54,7 +54,7 @@ Runs on every push and pull request:
 - ✅ Multi-platform matrix testing
 - ✅ Comprehensive test suite
 - ✅ Security analysis with OWASP dependency check
-- ✅ Code coverage reporting with Codecov
+- ✅ Code coverage reporting with JaCoCo
 - ✅ Artifact generation and upload
 
 #### 2. Performance Testing Workflow (`.github/workflows/performance.yml`)
@@ -98,7 +98,7 @@ Automated release management:
 
 2. **Configure Secrets** (for private repositories):
    ```bash
-   # Optional: Add CODECOV_TOKEN for coverage reporting
+   # No secrets are required for the current pipeline
    # Repository → Settings → Secrets and variables → Actions
    ```
 

@@ -153,13 +153,6 @@ jobs:
         env:
           AFFINITY_TEST_MODE: comprehensive
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          file: target/site/jacoco/jacoco.xml
-          flags: ${{ runner.os }}
-          name: codecov-${{ matrix.os }}
-
   # Security and quality checks
   security-analysis:
     name: Security Analysis
