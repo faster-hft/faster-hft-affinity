@@ -108,6 +108,38 @@ class BookExamplesTest {
     }
 
     @Test
+    @DisplayName("Ch. 11.3.1 — NUMA topology discovery with the nested NUMAManager types")
+    void ch11_numaTopologyDiscovery() {
+        // --- verbatim book sample (Ch. 11.3.1) ---
+        AffinityLibrary affinity = AffinityLibraryFactory.getDefault();
+        NUMAManager numa = affinity.getNUMAManager();
+        NUMAManager.NumaTopology topology = numa.getTopology();
+        int nodes = numa.getNodeCount();
+        BitSet cpus = numa.getNodeCpus(0).getValue();
+        NUMAManager.NumaNodeMemoryInfo memInfo = numa.getNodeMemoryInfo(0).getValue();
+        // --- end verbatim ---
+
+        assertNotNull(numa);
+        assertNotNull(topology);
+        assertTrue(nodes >= 1);
+        assertNotNull(numa.getNodeCpus(0));
+        assertNotNull(numa.getNodeMemoryInfo(0));
+    }
+
+    @Test
+    @DisplayName("Ch. 11.3.2 — NUMA inter-node distance matrix")
+    void ch11_numaDistanceMatrix() {
+        AffinityLibrary affinity = AffinityLibraryFactory.getDefault();
+        NUMAManager numa = affinity.getNUMAManager();
+
+        // --- verbatim book sample (Ch. 11.3.2) ---
+        NUMAManager.NumaDistanceMatrix distances = numa.getDistanceMatrix().getValue();
+        // --- end verbatim ---
+
+        assertNotNull(numa.getDistanceMatrix());
+    }
+
+    @Test
     @DisplayName("Ch. 10 — topology discovery with the fully qualified nested type")
     void ch10_topologyDiscovery() {
         AffinityLibrary affinity = AffinityLibraryFactory.getDefault();
