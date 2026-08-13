@@ -31,3 +31,9 @@ Per-thread NUMA memory policies (bind, preferred, interleave) instead of a singl
 Runtime NUMA statistics — local vs. remote access ratios and per-node allocation counters — exposed through the monitoring API.
 
 **Status:** Planned
+
+## SIMD_CAPABILITY_DETECTION
+
+Runtime detection of SIMD instruction-set support (x86 AVX/AVX2/AVX-512, ARM NEON/SVE) exposed as `AffinityLibrary.getSIMDCapabilities()`.
+
+**Status:** Planned
